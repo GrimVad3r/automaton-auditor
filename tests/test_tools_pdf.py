@@ -127,6 +127,19 @@ class TestPDFAnalyzer:
         assert "hallucinated_claims" in evidences
         assert evidences["hallucinated_claims"].found is False
 
+    def test_cross_reference_claims_with_absolute_verified_paths(self, analyzer):
+        """Test that absolute verified paths are normalized before comparison."""
+        test_text = "We have src/tools/git_tools.py and src/core/graph.py."
+        verified_files = [
+            r"C:\tmp\auditor\repo\src\tools\git_tools.py",
+            r"C:\tmp\auditor\repo\src\core\graph.py",
+        ]
+
+        evidences = analyzer.cross_reference_claims(test_text, verified_files)
+
+        assert "hallucinated_claims" in evidences
+        assert evidences["hallucinated_claims"].found is False
+
     def test_cross_reference_no_claims(self, analyzer):
         """Test when PDF has no file claims."""
         test_text = "This is a document without file references."

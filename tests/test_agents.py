@@ -161,6 +161,55 @@ class TestProsecutor:
             assert all(isinstance(op, JudicialOpinion) for op in opinions)
             assert all(op.judge == "Prosecutor" for op in opinions)
 
+    def test_tool_use_failure_falls_back_to_json(self, sample_rubric):
+        """Test fallback to JSON response mode when tool/function calling fails."""
+        judge = Prosecutor()
+        criterion = sample_rubric["dimensions"][0]
+        judge.llm = Mock()
+        judge.llm.invoke.side_effect = Exception("tool_use_failed")
+        judge.raw_llm = Mock()
+
+        fallback_response = Mock(
+            content=(
+                '{"criterion_id":"test_criterion","score":3,'
+                '"argument":"This fallback argument is intentionally long enough to satisfy '
+                'the minimum character requirement for structured opinion validation.",'
+                '"cited_evidence":["fallback_evidence"]}'
+            )
+        )
+        judge.raw_llm.invoke.return_value = fallback_response
+        opinion = judge.render_opinion(criterion, {})
+
+        assert opinion.score == 3
+        assert opinion.criterion_id == "test_criterion"
+        assert "fallback" in opinion.argument.lower()
+
+    def test_rate_limit_retry_then_success(self, sample_rubric):
+        """Test retry behavior for transient rate-limit errors."""
+        judge = Prosecutor()
+        criterion = sample_rubric["dimensions"][0]
+        judge.llm = Mock()
+        judge.raw_llm = Mock()
+
+        judge.llm.invoke.side_effect = [
+            Exception("429 rate_limit_exceeded"),
+            {
+                "criterion_id": "test_criterion",
+                "score": 4,
+                "argument": (
+                    "This retry result is intentionally long enough to satisfy the "
+                    "minimum argument length while verifying rate-limit recovery."
+                ),
+                "cited_evidence": ["retry_evidence"],
+            },
+        ]
+
+        with patch("src.agents.judges.base_judge.time.sleep", return_value=None):
+            opinion = judge.render_opinion(criterion, {})
+
+        assert opinion.score == 4
+        assert opinion.criterion_id == "test_criterion"
+
 
 class TestDefense:
     """Tests for Defense judge."""

@@ -23,6 +23,9 @@ class SecurityFilter(logging.Filter):
         "authorization",
         "openai_api_key",
         "anthropic_api_key",
+        "groq_api_key",
+        "huggingface_api_key",
+        "huggingfacehub_api_token",
     }
 
     def filter(self, record: logging.LogRecord) -> bool:
@@ -45,6 +48,8 @@ class SecurityFilter(logging.Filter):
 
         message = re.sub(r"sk-[a-zA-Z0-9]{20,}", "sk-***REDACTED***", message)
         message = re.sub(r"sk-ant-[a-zA-Z0-9-]{95}", "sk-ant-***REDACTED***", message)
+        message = re.sub(r"gsk_[a-zA-Z0-9]{20,}", "gsk_***REDACTED***", message)
+        message = re.sub(r"hf_[a-zA-Z0-9]{20,}", "hf_***REDACTED***", message)
         return message
 
 

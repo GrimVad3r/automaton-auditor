@@ -254,7 +254,19 @@ class PDFAnalyzer:
         evidences: Dict[str, Evidence] = {}
 
         def normalize_path(value: str) -> str:
-            return value.rstrip(".,;:!?)\"'")
+            normalized = value.rstrip(".,;:!?)\"'").replace("\\", "/")
+            return normalized
+
+        def to_project_relative_path(value: str) -> Optional[str]:
+            """
+            Convert absolute/heterogeneous locations into project-relative paths
+            like `src/core/graph.py` for fair claim verification.
+            """
+            normalized = normalize_path(value)
+            match = re.search(r"(?:^|/)((?:src|lib|app|tools|agents)/[\w/.-]+)", normalized)
+            if match:
+                return match.group(1)
+            return None
 
         # Extract file references
         file_pattern = r"(?:src|lib|app|tools|agents)/[\w/.-]+"
@@ -264,7 +276,12 @@ class PDFAnalyzer:
             return evidences
 
         # Check which claims are verified
-        verified_set = {normalize_path(path) for path in verified_files}
+        verified_set = set()
+        for path in verified_files:
+            relative = to_project_relative_path(path)
+            if relative:
+                verified_set.add(relative)
+
         hallucinated = claimed_files - verified_set
 
         if hallucinated:

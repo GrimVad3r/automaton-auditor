@@ -50,6 +50,38 @@ class TestSecurityFilter:
         assert "sk-ant-***REDACTED***" in record.msg
         assert "sk-ant-aaa" not in record.msg
 
+    def test_filter_groq_key(self, security_filter):
+        """Test redaction of Groq API keys."""
+        record = logging.LogRecord(
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="Using key: gsk_" + "a" * 44,
+            args=(),
+            exc_info=None,
+        )
+
+        security_filter.filter(record)
+        assert "gsk_***REDACTED***" in record.msg
+        assert "gsk_aaa" not in record.msg
+
+    def test_filter_huggingface_key(self, security_filter):
+        """Test redaction of Hugging Face API keys."""
+        record = logging.LogRecord(
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="Using key: hf_" + "a" * 40,
+            args=(),
+            exc_info=None,
+        )
+
+        security_filter.filter(record)
+        assert "hf_***REDACTED***" in record.msg
+        assert "hf_aaa" not in record.msg
+
     def test_filter_no_sensitive_data(self, security_filter):
         """Test that non-sensitive messages pass through."""
         original_msg = "This is a normal log message"

@@ -22,7 +22,13 @@ class TestConfig:
         # test_env fixture also sets reduced limits for faster test execution
         assert config.max_repo_size_mb == 100
         assert config.git_clone_timeout == 10
-        assert config.default_llm_model == "gpt-4-turbo-preview"
+        assert isinstance(config.default_llm_model, str)
+        assert config.default_llm_model.strip() != ""
+        assert config.default_groq_model == "llama-3.1-8b-instant"
+        assert config.llm_max_output_tokens > 0
+        assert config.llm_max_evidence_items_per_detective > 0
+        assert config.llm_max_evidence_content_chars > 0
+        assert config.llm_max_context_chars > 0
 
     def test_config_from_env(self, test_env):
         """Test configuration loading from environment."""
@@ -57,9 +63,38 @@ class TestConfig:
         config = Config()
         config.openai_api_key = None
         config.anthropic_api_key = None
+        config.groq_api_key = None
+        config.huggingface_api_key = None
 
         with pytest.raises(ConfigurationError, match="No LLM API key"):
             config.validate_configuration()
+
+    def test_validate_configuration_groq_with_na_placeholders(self):
+        """Test Groq is accepted when other providers are set to NA placeholders."""
+        config = Config()
+        config.openai_api_key = "NA"
+        config.anthropic_api_key = "NA"
+        config.groq_api_key = "gsk-test-key"
+
+        # Should normalize NA values and pass validation using Groq key.
+        config.validate_configuration()
+        assert config.openai_api_key is None
+        assert config.anthropic_api_key is None
+        assert config.groq_api_key == "gsk-test-key"
+
+    def test_validate_configuration_huggingface_with_na_placeholders(self):
+        """Test Hugging Face is accepted when other providers are set to NA placeholders."""
+        config = Config()
+        config.openai_api_key = "NA"
+        config.anthropic_api_key = "NA"
+        config.groq_api_key = "NA"
+        config.huggingface_api_key = "hf-test-key"
+
+        config.validate_configuration()
+        assert config.openai_api_key is None
+        assert config.anthropic_api_key is None
+        assert config.groq_api_key is None
+        assert config.huggingface_api_key == "hf-test-key"
 
     def test_validate_configuration_invalid_limits(self, test_env):
         """Test validation failure with invalid limits."""
@@ -96,6 +131,8 @@ class TestLoadConfig:
         # Ensure no ambient env var overrides values from the temp env file.
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("GROQ_API_KEY", raising=False)
+        monkeypatch.delenv("HUGGINGFACE_API_KEY", raising=False)
         monkeypatch.delenv("LOG_LEVEL", raising=False)
         monkeypatch.delenv("MAX_REPO_SIZE_MB", raising=False)
 
@@ -116,6 +153,8 @@ MAX_REPO_SIZE_MB=200
         # Clear process-level keys so this test is deterministic.
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("GROQ_API_KEY", raising=False)
+        monkeypatch.delenv("HUGGINGFACE_API_KEY", raising=False)
         # Also isolate from any real project-level .env file.
         original_cwd = Path.cwd()
         try:
@@ -125,6 +164,50 @@ MAX_REPO_SIZE_MB=200
         finally:
             # Ensure temp_dir can be cleaned up on Windows.
             monkeypatch.chdir(original_cwd)
+
+    def test_load_config_groq_with_na_placeholders(self, temp_dir, monkeypatch):
+        """Test loading .env where only Groq key is active."""
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("GROQ_API_KEY", raising=False)
+        monkeypatch.delenv("HUGGINGFACE_API_KEY", raising=False)
+
+        env_file = temp_dir / ".env"
+        env_file.write_text(
+            """
+OPENAI_API_KEY=NA
+ANTHROPIC_API_KEY=NA
+GROQ_API_KEY=gsk-test-key
+"""
+        )
+
+        config = load_config(str(env_file))
+        assert config.openai_api_key is None
+        assert config.anthropic_api_key is None
+        assert config.groq_api_key == "gsk-test-key"
+
+    def test_load_config_huggingface_with_na_placeholders(self, temp_dir, monkeypatch):
+        """Test loading .env where only Hugging Face key is active."""
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("GROQ_API_KEY", raising=False)
+        monkeypatch.delenv("HUGGINGFACE_API_KEY", raising=False)
+
+        env_file = temp_dir / ".env"
+        env_file.write_text(
+            """
+OPENAI_API_KEY=NA
+ANTHROPIC_API_KEY=NA
+GROQ_API_KEY=NA
+HUGGINGFACE_API_KEY=hf-test-key
+"""
+        )
+
+        config = load_config(str(env_file))
+        assert config.openai_api_key is None
+        assert config.anthropic_api_key is None
+        assert config.groq_api_key is None
+        assert config.huggingface_api_key == "hf-test-key"
 
 
 class TestLoadRubric:

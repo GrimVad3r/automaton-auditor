@@ -105,6 +105,29 @@ Edit `.env` file:
 OPENAI_API_KEY=sk-your-openai-key
 # OR
 ANTHROPIC_API_KEY=sk-ant-your-anthropic-key
+# OR
+GROQ_API_KEY=gsk_your-groq-key
+# OR
+HUGGINGFACE_API_KEY=hf_your-hf-key
+
+# Optional placeholders (treated as disabled)
+# OPENAI_API_KEY=NA
+# ANTHROPIC_API_KEY=NA
+# GROQ_API_KEY=NA
+# HUGGINGFACE_API_KEY=NA
+
+# Optional provider-specific model settings
+# DEFAULT_GROQ_MODEL=llama-3.1-8b-instant
+# DEFAULT_HUGGINGFACE_MODEL=meta-llama/Llama-3.1-8B-Instruct
+# HUGGINGFACE_BASE_URL=https://router.huggingface.co/v1
+
+# Token budget controls (useful for Groq free tier: 12K TPM in+out)
+# LLM_MAX_OUTPUT_TOKENS=300
+# LLM_MAX_EVIDENCE_ITEMS_PER_DETECTIVE=3
+# LLM_MAX_EVIDENCE_CONTENT_CHARS=120
+# LLM_MAX_CONTEXT_CHARS=1800
+# LLM_RETRY_BASE_DELAY_SECONDS=1.0
+# LLM_RETRY_MAX_DELAY_SECONDS=8.0
 
 # LangSmith (optional but recommended)
 LANGCHAIN_TRACING_V2=true

@@ -105,7 +105,10 @@ class SecurityValidator:
         try:
             # Resolve to absolute path
             base_resolved = base_dir.resolve()
-            target_resolved = (base_dir / path).resolve()
+            raw_target = Path(path)
+            target_resolved = (
+                raw_target.resolve() if raw_target.is_absolute() else (base_dir / raw_target).resolve()
+            )
 
             # Check if target is within base
             try:
