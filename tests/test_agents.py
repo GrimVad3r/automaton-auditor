@@ -246,6 +246,72 @@ class TestProsecutor:
         assert opinion.score == 3
         assert all("src/graph.py" not in cite for cite in opinion.cited_evidence)
 
+    def test_opinion_grounding_removes_unsupported_quant_claims(self, sample_rubric):
+        """Unsupported percentage claims should be pruned and penalized."""
+        judge = Prosecutor()
+        criterion = sample_rubric["dimensions"][0]
+        evidences = {
+            "RepoInvestigator": [
+                Evidence(
+                    found=True,
+                    content="Pydantic models found in src/core/state.py",
+                    location="src/core/state.py",
+                    confidence=0.95,
+                    detective_name="RepoInvestigator",
+                )
+            ]
+        }
+
+        argument = (
+            "Pydantic models are present in src/core/state.py and strongly typed. "
+            "There is 90% similarity across all judge prompts without exception, which proves collusion. "
+            "This sentence is intentionally long enough to satisfy minimum argument length constraints."
+        )
+        grounded_response = StructuredOpinion(
+            criterion_id="test_criterion",
+            score=4,
+            argument=argument,
+            cited_evidence=["src/core/state.py"],
+        )
+
+        with patch.object(judge, "_invoke_with_fallback", return_value=grounded_response):
+            opinion = judge.render_opinion(criterion, evidences)
+
+        assert "90% similarity" not in opinion.argument
+        assert "Unverified claims were removed" in opinion.argument
+        assert opinion.score == 3
+
+    def test_opinion_grounding_rejects_directory_only_citations(self, sample_rubric):
+        """Directory-only citations should be dropped in favor of verified file evidence."""
+        judge = Prosecutor()
+        criterion = sample_rubric["dimensions"][0]
+        evidences = {
+            "RepoInvestigator": [
+                Evidence(
+                    found=True,
+                    content="Sandbox utility exists",
+                    location="src/tools/security.py",
+                    confidence=0.93,
+                    detective_name="RepoInvestigator",
+                )
+            ]
+        }
+        grounded_response = StructuredOpinion(
+            criterion_id="test_criterion",
+            score=4,
+            argument=(
+                "The security tooling is present and generally functional with adequate structure. "
+                "This argument is long enough to satisfy validation constraints."
+            ),
+            cited_evidence=["src/tools/"],
+        )
+
+        with patch.object(judge, "_invoke_with_fallback", return_value=grounded_response):
+            opinion = judge.render_opinion(criterion, evidences)
+
+        assert "src/tools/" not in opinion.cited_evidence
+        assert any("src/tools/security.py" in cite for cite in opinion.cited_evidence)
+
 
 class TestDefense:
     """Tests for Defense judge."""

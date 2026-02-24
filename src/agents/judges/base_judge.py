@@ -528,11 +528,27 @@ Keep your argument concise (target 100-220 characters).
         argument = response.argument
         adjusted_score = response.score
         unverified_paths = self._find_unverified_paths(argument, allowed_locations)
+        penalties = 0
         if unverified_paths:
             for path in unverified_paths:
                 argument = argument.replace(path, "[UNVERIFIED_PATH]")
-            argument += " Unverified path claims were removed from this opinion."
-            adjusted_score = max(1, adjusted_score - 1)
+            penalties += 1
+
+        argument, removed_claims = self._prune_unverified_claim_sentences(
+            argument, evidences, allowed_locations
+        )
+        if removed_claims:
+            penalties += 1
+
+        if penalties:
+            adjusted_score = max(1, adjusted_score - penalties)
+            argument += " Unverified claims were removed from this opinion."
+
+        if len(argument) < 100:
+            argument = (
+                argument
+                + " Additional verified evidence is required before stronger conclusions can be made."
+            )
 
         filtered_citations = [
             citation
@@ -572,6 +588,12 @@ Keep your argument concise (target 100-220 characters).
         if not normalized_citation:
             return False
 
+        if normalized_citation.endswith("/"):
+            return False
+        if "/" in normalized_citation and "." not in normalized_citation.rsplit("/", 1)[-1]:
+            if not normalized_citation.startswith("http"):
+                return False
+
         for location in allowed_locations:
             if location in normalized_citation or normalized_citation in location:
                 return True
@@ -602,3 +624,70 @@ Keep your argument concise (target 100-220 characters).
             if not is_verified:
                 unverified.append(referenced_path)
         return unverified
+
+    def _prune_unverified_claim_sentences(
+        self,
+        argument: str,
+        evidences: Dict[str, List[Evidence]],
+        allowed_locations: List[str],
+    ) -> tuple[str, int]:
+        """
+        Remove high-confidence quantitative/absolute claims not supported by evidence.
+        """
+        sentences = re.split(r"(?<=[.!?])\s+", argument.strip())
+        if not sentences:
+            return argument, 0
+
+        evidence_tokens = self._collect_evidence_tokens(evidences)
+        kept_sentences: List[str] = []
+        removed_count = 0
+
+        for sentence in sentences:
+            if not sentence:
+                continue
+            if self._is_high_risk_claim(sentence) and not self._sentence_has_evidence_anchor(
+                sentence, evidence_tokens, allowed_locations
+            ):
+                removed_count += 1
+                continue
+            kept_sentences.append(sentence)
+
+        cleaned = " ".join(kept_sentences).strip()
+        if not cleaned:
+            cleaned = "Opinion retained only where verifiable evidence exists."
+        return cleaned, removed_count
+
+    def _is_high_risk_claim(self, sentence: str) -> bool:
+        """Detect claim patterns that should be evidence-anchored."""
+        high_risk_patterns = (
+            r"\b\d{1,3}%\b",
+            r"\b\d+\s*(?:times|x)\b",
+            r"\b(?:always|never|purely|only|all|none|no evidence)\b",
+        )
+        return any(re.search(pattern, sentence, re.IGNORECASE) for pattern in high_risk_patterns)
+
+    def _collect_evidence_tokens(self, evidences: Dict[str, List[Evidence]]) -> set[str]:
+        """Collect compact token set from evidence for lightweight claim anchoring."""
+        tokens: set[str] = set()
+        for evidence_list in evidences.values():
+            for evidence in evidence_list:
+                text = f"{evidence.location} {evidence.content or ''}"
+                for token in re.findall(r"[A-Za-z][A-Za-z0-9_./-]{3,}", text.lower()):
+                    if token.startswith(("src/", "http", "c:/")) or len(token) >= 6:
+                        tokens.add(token)
+        return tokens
+
+    def _sentence_has_evidence_anchor(
+        self,
+        sentence: str,
+        evidence_tokens: set[str],
+        allowed_locations: List[str],
+    ) -> bool:
+        """Check whether a sentence overlaps with evidence-derived anchors."""
+        normalized_sentence = self._normalize_location(sentence)
+        if any(location in normalized_sentence for location in allowed_locations):
+            return True
+
+        sentence_tokens = set(re.findall(r"[A-Za-z][A-Za-z0-9_./-]{3,}", normalized_sentence))
+        overlap = sentence_tokens & evidence_tokens
+        return len(overlap) >= 2
