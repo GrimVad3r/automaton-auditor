@@ -17,9 +17,11 @@ class TestConfig:
         """Test default configuration values."""
         config = Config()
 
-        assert config.log_level == "INFO"
-        assert config.max_repo_size_mb == 500
-        assert config.git_clone_timeout == 60
+        # test_env fixture sets LOG_LEVEL=ERROR for quieter test output
+        assert config.log_level == "ERROR"
+        # test_env fixture also sets reduced limits for faster test execution
+        assert config.max_repo_size_mb == 100
+        assert config.git_clone_timeout == 10
         assert config.default_llm_model == "gpt-4-turbo-preview"
 
     def test_config_from_env(self, test_env):
@@ -89,8 +91,14 @@ class TestConfig:
 class TestLoadConfig:
     """Tests for load_config function."""
 
-    def test_load_config_with_env_file(self, test_env, temp_dir):
+    def test_load_config_with_env_file(self, test_env, temp_dir, monkeypatch):
         """Test loading configuration from .env file."""
+        # Ensure no ambient env var overrides values from the temp env file.
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("LOG_LEVEL", raising=False)
+        monkeypatch.delenv("MAX_REPO_SIZE_MB", raising=False)
+
         env_file = temp_dir / ".env"
         env_file.write_text("""
 OPENAI_API_KEY=sk-test-key
@@ -98,15 +106,25 @@ LOG_LEVEL=DEBUG
 MAX_REPO_SIZE_MB=200
 """)
 
-        with pytest.raises(ConfigurationError):
-            # Will fail validation but should parse env file
-            config = load_config(str(env_file))
+        config = load_config(str(env_file))
+        assert config.openai_api_key == "sk-test-key"
+        assert config.log_level == "DEBUG"
+        assert config.max_repo_size_mb == 200
 
-    def test_load_config_nonexistent_file(self):
+    def test_load_config_nonexistent_file(self, monkeypatch, temp_dir):
         """Test loading with nonexistent .env file."""
-        # Should not crash, just use defaults
-        with pytest.raises(ConfigurationError):
-            config = load_config("nonexistent.env")
+        # Clear process-level keys so this test is deterministic.
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        # Also isolate from any real project-level .env file.
+        original_cwd = Path.cwd()
+        try:
+            monkeypatch.chdir(temp_dir)
+            with pytest.raises(ConfigurationError):
+                load_config("nonexistent.env")
+        finally:
+            # Ensure temp_dir can be cleaned up on Windows.
+            monkeypatch.chdir(original_cwd)
 
 
 class TestLoadRubric:

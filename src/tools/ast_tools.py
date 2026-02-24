@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Set
 
 from ..core.state import Evidence
-from ..utils.exceptions import ASTParsingError
+from ..utils.exceptions import ASTParsingError, PathTraversalError
 from ..utils.logger import get_logger
 from ..utils.validators import SecurityValidator
 
@@ -45,6 +45,9 @@ class ASTAnalyzer:
         # Validate file path for security
         try:
             validated_path = SecurityValidator.validate_file_path(str(file_path), self.base_dir)
+        except PathTraversalError:
+            # Security-critical validation failures should be explicit.
+            raise
         except Exception as e:
             logger.error(f"File path validation failed: {e}")
             evidences["file_access"] = Evidence(

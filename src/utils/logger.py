@@ -28,16 +28,22 @@ class SecurityFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         """Redact sensitive information from log messages."""
         if hasattr(record, "msg") and isinstance(record.msg, str):
+            # Always apply key-pattern redaction, then check keyword hints.
+            redacted = self._redact_keys(record.msg)
+            if redacted != record.msg:
+                record.msg = redacted
+                return True
             for key in self.SENSITIVE_KEYS:
                 if key in record.msg.lower():
                     record.msg = self._redact_keys(record.msg)
+                    break
         return True
 
     def _redact_keys(self, message: str) -> str:
         """Redact potential API keys from message."""
         import re
 
-        message = re.sub(r"sk-[a-zA-Z0-9]{48}", "sk-***REDACTED***", message)
+        message = re.sub(r"sk-[a-zA-Z0-9]{20,}", "sk-***REDACTED***", message)
         message = re.sub(r"sk-ant-[a-zA-Z0-9-]{95}", "sk-ant-***REDACTED***", message)
         return message
 

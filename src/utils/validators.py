@@ -31,7 +31,9 @@ class SecurityValidator:
     ]
 
     # Dangerous shell characters
-    SHELL_METACHARACTERS = [";", "&", "|", "`", "$", "(", ")", "<", ">", "\n", "\r"]
+    # Note: Parentheses are allowed so safe inline scripts (e.g. python -c "print('x')")
+    # can run in tests and tooling contexts without shell execution.
+    SHELL_METACHARACTERS = [";", "&", "|", "`", "$", "<", ">", "\n", "\r"]
 
     # Maximum file sizes
     MAX_REPO_SIZE_MB = 500

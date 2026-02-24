@@ -9,6 +9,7 @@ from typing import Dict, List, Optional
 from ..core.state import Evidence
 from ..utils.exceptions import CloneError, RepositoryError
 from ..utils.logger import get_logger
+from ..utils.validators import SecurityValidator
 from .security import RepositorySandbox
 
 logger = get_logger()
@@ -35,6 +36,10 @@ class GitAnalyzer:
         """
         logger.info(f"Starting repository analysis: {repo_url}")
         evidences: Dict[str, Evidence] = {}
+        # URL validation is a security gate; propagate violations to callers.
+        SecurityValidator.validate_git_url(
+            repo_url, allowed_domains=self.sandbox.config.get_allowed_domains()
+        )
 
         with self.sandbox.clone_repository(repo_url) as (success, repo_path, error):
             if not success:

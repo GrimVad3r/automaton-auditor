@@ -85,8 +85,10 @@ class Config(BaseSettings):
         # Check LangSmith if tracing enabled
         if self.langchain_tracing_v2 and not self.langchain_api_key:
             logger.warning(
-                "LangSmith tracing enabled but LANGCHAIN_API_KEY not set. Tracing may fail."
+                "LangSmith tracing enabled but LANGCHAIN_API_KEY not set. "
+                "Disabling tracing to avoid runtime ingestion failures."
             )
+            self.langchain_tracing_v2 = False
 
         # Validate numeric ranges
         if self.max_repo_size_mb <= 0:
@@ -138,7 +140,8 @@ def load_config(env_file: str = ".env", require_llm_keys: bool = True) -> Config
         ConfigurationError: If configuration is invalid
     """
     # Load .env file
-    load_dotenv(env_file, override=True)
+    # Respect process-level env vars (e.g. test harness overrides) over .env file values.
+    load_dotenv(env_file, override=False)
 
     # Create and validate config
     config = Config()

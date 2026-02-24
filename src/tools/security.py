@@ -4,6 +4,7 @@ Provides sandboxed environments for potentially dangerous operations.
 """
 
 import subprocess
+import sys
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
@@ -65,6 +66,7 @@ class SandboxedExecutor:
         """
         config = get_config()
         timeout = timeout or config.git_clone_timeout
+        command = SandboxedExecutor._normalize_command(command)
 
         # Validate command arguments
         for arg in command:
@@ -97,6 +99,31 @@ class SandboxedExecutor:
         except Exception as e:
             logger.error(f"Command execution failed: {e}", exc_info=True)
             raise
+
+    @staticmethod
+    def _normalize_command(command: List[str]) -> List[str]:
+        """
+        Normalize common test/tool commands for Windows compatibility.
+        """
+        if not command:
+            return command
+
+        cmd, *args = command
+
+        # Prefer the currently running interpreter for Python invocations.
+        if cmd == "python":
+            return [sys.executable] + args
+
+        if sys.platform.startswith("win"):
+            if cmd == "echo":
+                return ["cmd", "/c", "echo"] + args
+            if cmd == "ls":
+                return ["cmd", "/c", "dir"] + args
+            if cmd == "sleep":
+                seconds = args[0] if args else "1"
+                return ["powershell", "-NoProfile", "-Command", f"Start-Sleep -Seconds {seconds}"]
+
+        return command
 
     @staticmethod
     def run_git_command(

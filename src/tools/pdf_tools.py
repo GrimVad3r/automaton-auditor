@@ -242,17 +242,19 @@ class PDFAnalyzer:
 
         evidences: Dict[str, Evidence] = {}
 
+        def normalize_path(value: str) -> str:
+            return value.rstrip(".,;:!?)\"'")
+
         # Extract file references
         file_pattern = r"(?:src|lib|app|tools|agents)/[\w/.-]+"
-        claimed_files = set(re.findall(file_pattern, text))
+        claimed_files = {normalize_path(match) for match in re.findall(file_pattern, text)}
 
         if not claimed_files:
             return evidences
 
         # Check which claims are verified
-        verified_set = set(verified_files)
+        verified_set = {normalize_path(path) for path in verified_files}
         hallucinated = claimed_files - verified_set
-        verified = claimed_files & verified_set
 
         if hallucinated:
             evidences["hallucinated_claims"] = Evidence(
