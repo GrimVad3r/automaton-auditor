@@ -144,13 +144,30 @@ class ChiefJustice:
 
         # Rule: High variance (>2) triggers re-evaluation logic
         if variance > 2:
-            # Apply Rule of Functionality: Tech Lead carries highest weight
-            final_score = tech_lead_score
-            note = (
-                f"{criterion_id}: High variance detected ({min(scores)}-{max(scores)}). "
-                f"Tech Lead opinion (score: {tech_lead_score}) carries decisive weight "
-                f"due to pragmatic focus."
+            # Conservative synthesis under sharp disagreement to reduce false positives.
+            weighted_score = int(
+                round(
+                    (
+                        prosecutor_score * 0.4
+                        + defense_score * 0.2
+                        + tech_lead_score * 0.4
+                    )
+                )
             )
+            if prosecutor_score <= 2:
+                final_score = min(weighted_score, 3)
+                note = (
+                    f"{criterion_id}: High variance detected ({min(scores)}-{max(scores)}). "
+                    f"Prosecutor raised severe concerns (score: {prosecutor_score}); "
+                    f"applying conservative cap -> {final_score}."
+                )
+            else:
+                final_score = weighted_score
+                note = (
+                    f"{criterion_id}: High variance detected ({min(scores)}-{max(scores)}). "
+                    f"Balanced weighted synthesis (Prosecutor/TechLead 40%, Defense 20%) = "
+                    f"{final_score}."
+                )
         else:
             # Moderate variance: weighted average with Tech Lead emphasis
             final_score = int(

@@ -164,6 +164,7 @@ Keep your argument concise (target 100-220 characters).
                 {"role": "user", "content": user_message},
             ]
             response = self._invoke_with_fallback(messages, criterion_id)
+            response = self._ground_opinion(response, criterion_id, evidences)
 
             # Convert to JudicialOpinion
             opinion = JudicialOpinion(
@@ -509,3 +510,95 @@ Keep your argument concise (target 100-220 characters).
         if len(normalized) > 90:
             return normalized[-90:]
         return normalized
+
+    def _ground_opinion(
+        self,
+        response: StructuredOpinion,
+        criterion_id: str,
+        evidences: Dict[str, List[Evidence]],
+    ) -> StructuredOpinion:
+        """
+        Ground LLM output against known evidence to reduce path hallucinations.
+        """
+        allowed_locations = self._collect_allowed_locations(evidences)
+        if not allowed_locations:
+            response.criterion_id = criterion_id
+            return response
+
+        argument = response.argument
+        adjusted_score = response.score
+        unverified_paths = self._find_unverified_paths(argument, allowed_locations)
+        if unverified_paths:
+            for path in unverified_paths:
+                argument = argument.replace(path, "[UNVERIFIED_PATH]")
+            argument += " Unverified path claims were removed from this opinion."
+            adjusted_score = max(1, adjusted_score - 1)
+
+        filtered_citations = [
+            citation
+            for citation in response.cited_evidence
+            if self._is_citation_verified(citation, allowed_locations)
+        ]
+        if not filtered_citations:
+            filtered_citations = self._fallback_citations(evidences)
+
+        return StructuredOpinion(
+            criterion_id=criterion_id,
+            score=adjusted_score,
+            argument=argument,
+            cited_evidence=filtered_citations,
+        )
+
+    def _collect_allowed_locations(self, evidences: Dict[str, List[Evidence]]) -> List[str]:
+        """Collect normalized evidence locations usable for citation checks."""
+        locations: set[str] = set()
+        for evidence_list in evidences.values():
+            for evidence in evidence_list:
+                location = self._normalize_location(evidence.location)
+                if location:
+                    locations.add(location)
+                compact_location = self._normalize_location(self._compact_location(evidence.location))
+                if compact_location:
+                    locations.add(compact_location)
+        return sorted(locations)
+
+    def _normalize_location(self, value: str) -> str:
+        """Normalize a location string for fuzzy evidence matching."""
+        return str(value or "").strip().lower().replace("\\", "/")
+
+    def _is_citation_verified(self, citation: str, allowed_locations: List[str]) -> bool:
+        """Check whether a citation overlaps with known evidence locations."""
+        normalized_citation = self._normalize_location(citation)
+        if not normalized_citation:
+            return False
+
+        for location in allowed_locations:
+            if location in normalized_citation or normalized_citation in location:
+                return True
+        return False
+
+    def _fallback_citations(self, evidences: Dict[str, List[Evidence]]) -> List[str]:
+        """Fallback to top evidence locations when model citations are ungrounded."""
+        ranked: List[Evidence] = []
+        for evidence_list in evidences.values():
+            ranked.extend(evidence_list)
+        ranked = sorted(ranked, key=lambda ev: ev.confidence, reverse=True)
+        fallback = [self._compact_location(ev.location) for ev in ranked[:3] if ev.location]
+        return fallback or ["insufficient_verified_evidence"]
+
+    def _find_unverified_paths(self, argument: str, allowed_locations: List[str]) -> List[str]:
+        """Extract path-like references that are not present in collected evidence."""
+        path_pattern = re.compile(r"\b(?:src|lib|app|tools|agents)/[\w./-]+\b", re.IGNORECASE)
+        unverified: List[str] = []
+        for match in path_pattern.finditer(argument):
+            referenced_path = match.group(0)
+            normalized_path = self._normalize_location(referenced_path)
+            is_verified = any(
+                normalized_path == location
+                or normalized_path in location
+                or location.endswith(normalized_path)
+                for location in allowed_locations
+            )
+            if not is_verified:
+                unverified.append(referenced_path)
+        return unverified

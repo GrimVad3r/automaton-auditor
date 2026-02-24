@@ -189,6 +189,41 @@ class TestMarkdownReportFormatter:
 
         assert "All criteria met expectations" in remediation or "No immediate remediation" in remediation
 
+    def test_generate_remediation_high_tension_even_with_high_scores(self):
+        """High score criteria should still be flagged when judge variance is severe."""
+        final_scores = {"criterion1": 4}
+        opinions_by_criterion = {
+            "criterion1": [
+                JudicialOpinion(
+                    judge="Prosecutor",
+                    criterion_id="criterion1",
+                    score=1,
+                    argument="Severe issue statement with enough text for validation.",
+                    cited_evidence=[],
+                ),
+                JudicialOpinion(
+                    judge="Defense",
+                    criterion_id="criterion1",
+                    score=5,
+                    argument="Optimistic statement with enough text for validation.",
+                    cited_evidence=[],
+                ),
+                JudicialOpinion(
+                    judge="TechLead",
+                    criterion_id="criterion1",
+                    score=4,
+                    argument="Balanced statement with enough text for validation.",
+                    cited_evidence=[],
+                ),
+            ]
+        }
+
+        remediation = MarkdownReportFormatter._generate_remediation(
+            final_scores, opinions_by_criterion
+        )
+        assert "Review Required" in remediation
+        assert "criterion1" in remediation
+
     def test_generate_dialectics_summary(self, sample_data):
         """Test dialectics summary generation."""
         evidences, opinions, final_scores = sample_data

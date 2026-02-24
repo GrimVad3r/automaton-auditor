@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch, MagicMock
 
 from src.agents.detectives import RepoInvestigator, DocAnalyst
 from src.agents.judges import Prosecutor, Defense, TechLead
+from src.agents.judges.base_judge import StructuredOpinion
 from src.agents.justice import ChiefJustice
 from src.core.state import Evidence, JudicialOpinion
 
@@ -210,6 +211,41 @@ class TestProsecutor:
         assert opinion.score == 4
         assert opinion.criterion_id == "test_criterion"
 
+    def test_opinion_grounding_removes_unverified_paths(self, sample_rubric):
+        """Test that hallucinated file-path claims are removed from opinions."""
+        judge = Prosecutor()
+        criterion = sample_rubric["dimensions"][0]
+
+        evidences = {
+            "RepoInvestigator": [
+                Evidence(
+                    found=True,
+                    content="State graph found",
+                    location="src/core/graph.py",
+                    confidence=0.95,
+                    detective_name="RepoInvestigator",
+                )
+            ]
+        }
+
+        long_argument = (
+            "The implementation references src/graph.py and claims parity with src/core/graph.py. "
+            "This narrative is intentionally long enough to satisfy minimum length requirements."
+        )
+        grounded_response = StructuredOpinion(
+            criterion_id="test_criterion",
+            score=4,
+            argument=long_argument,
+            cited_evidence=["src/graph.py"],
+        )
+
+        with patch.object(judge, "_invoke_with_fallback", return_value=grounded_response):
+            opinion = judge.render_opinion(criterion, evidences)
+
+        assert "[UNVERIFIED_PATH]" in opinion.argument
+        assert opinion.score == 3
+        assert all("src/graph.py" not in cite for cite in opinion.cited_evidence)
+
 
 class TestDefense:
     """Tests for Defense judge."""
@@ -343,6 +379,37 @@ class TestChiefJustice:
         # High variance should default to TechLead
         assert 1 <= score <= 5
         assert "variance" in note.lower()
+
+    def test_resolve_criterion_high_variance_with_severe_prosecutor_caps_score(self):
+        """High variance + severe prosecutor concern should apply conservative cap."""
+        chief = ChiefJustice()
+        opinions = [
+            JudicialOpinion(
+                judge="Prosecutor",
+                criterion_id="test",
+                score=1,
+                argument="Severe concern with enough details for validation length requirements.",
+                cited_evidence=[],
+            ),
+            JudicialOpinion(
+                judge="Defense",
+                criterion_id="test",
+                score=5,
+                argument="Generous claim with enough details for validation length requirements.",
+                cited_evidence=[],
+            ),
+            JudicialOpinion(
+                judge="TechLead",
+                criterion_id="test",
+                score=4,
+                argument="Balanced claim with enough details for validation length requirements.",
+                cited_evidence=[],
+            ),
+        ]
+
+        score, note = chief._resolve_criterion("test", opinions, {})
+        assert score <= 3
+        assert "conservative" in note.lower()
 
     def test_resolve_criterion_security_override(self):
         """Test security override rule."""

@@ -38,7 +38,6 @@ class MarkdownReportFormatter:
         """
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        # Group opinions by criterion
         opinions_by_criterion: Dict[str, List[JudicialOpinion]] = {}
         for opinion in opinions:
             if opinion.criterion_id not in opinions_by_criterion:
@@ -62,7 +61,6 @@ class MarkdownReportFormatter:
 
 """
 
-        # Add score summary table
         report += "| Criterion | Score |\n"
         report += "|-----------|-------|\n"
         for criterion_id, score in final_scores.items():
@@ -71,16 +69,13 @@ class MarkdownReportFormatter:
         total_score = sum(final_scores.values())
         max_score = len(final_scores) * 5
         percentage = (total_score / max_score) * 100 if max_score > 0 else 0
-
         report += f"\n**Total:** {total_score}/{max_score} ({percentage:.1f}%)\n\n"
 
         report += "---\n\n## Forensic Evidence\n\n"
-
-        # Add evidence section
         for detective_name, evidence_list in evidences.items():
             report += f"### {detective_name}\n\n"
             for evidence in evidence_list:
-                status = "✅ Found" if evidence.found else "❌ Not Found"
+                status = "[FOUND]" if evidence.found else "[NOT FOUND]"
                 report += f"**{status}** - {evidence.location}\n"
                 report += f"- **Confidence:** {evidence.confidence:.2f}\n"
                 if evidence.content:
@@ -88,12 +83,8 @@ class MarkdownReportFormatter:
                 report += "\n"
 
         report += "---\n\n## Judicial Analysis\n\n"
-
-        # Add judicial opinions
         for criterion_id, criterion_opinions in opinions_by_criterion.items():
             report += f"### {criterion_id}\n\n"
-
-            # Show each judge's opinion
             for opinion in criterion_opinions:
                 report += f"#### {opinion.judge}\n\n"
                 report += f"**Score:** {opinion.score}/5\n\n"
@@ -104,15 +95,12 @@ class MarkdownReportFormatter:
                         report += f"- {evidence_ref}\n"
                 report += "\n"
 
-            # Show final score for this criterion
             final = final_scores.get(criterion_id, 0)
             report += f"**Final Verdict:** {final}/5\n\n"
             report += "---\n\n"
 
         report += "## Remediation Plan\n\n"
-        report += MarkdownReportFormatter._generate_remediation(
-            final_scores, opinions_by_criterion
-        )
+        report += MarkdownReportFormatter._generate_remediation(final_scores, opinions_by_criterion)
 
         report += "\n---\n\n"
         report += "## Appendix: Dialectical Process\n\n"
@@ -127,39 +115,56 @@ class MarkdownReportFormatter:
     ) -> str:
         """Generate actionable remediation steps."""
         remediation = ""
-
-        # Focus on criteria with low scores
         low_scores = [(cid, score) for cid, score in final_scores.items() if score < 4]
 
-        if not low_scores:
-            remediation += "✅ **All criteria met expectations.** No immediate remediation required.\n\n"
+        high_tension = []
+        for criterion_id, criterion_opinions in opinions_by_criterion.items():
+            if not criterion_opinions:
+                continue
+            scores = [op.score for op in criterion_opinions]
+            variance = max(scores) - min(scores)
+            prosecutor_opinion = next(
+                (op for op in criterion_opinions if op.judge == "Prosecutor"),
+                None,
+            )
+            if variance >= 2 or (prosecutor_opinion and prosecutor_opinion.score <= 2):
+                high_tension.append((criterion_id, variance, prosecutor_opinion))
+
+        if not low_scores and not high_tension:
+            remediation += "[OK] **All criteria met expectations.** No immediate remediation required.\n\n"
             return remediation
 
-        remediation += "### Priority Issues\n\n"
-
-        for criterion_id, score in sorted(low_scores, key=lambda x: x[1]):
-            remediation += f"#### {criterion_id} (Score: {score}/5)\n\n"
-
-            # Extract key issues from judicial opinions
-            if criterion_id in opinions_by_criterion:
-                prosecutor_opinion = next(
-                    (o for o in opinions_by_criterion[criterion_id] if o.judge == "Prosecutor"),
-                    None,
-                )
-                tech_lead_opinion = next(
-                    (o for o in opinions_by_criterion[criterion_id] if o.judge == "TechLead"),
-                    None,
-                )
-
-                if prosecutor_opinion:
-                    remediation += f"**Critical Issues:**\n{prosecutor_opinion.argument}\n\n"
-
-                if tech_lead_opinion:
-                    remediation += (
-                        f"**Technical Recommendations:**\n{tech_lead_opinion.argument}\n\n"
+        if low_scores:
+            remediation += "### Priority Issues\n\n"
+            for criterion_id, score in sorted(low_scores, key=lambda item: item[1]):
+                remediation += f"#### {criterion_id} (Score: {score}/5)\n\n"
+                if criterion_id in opinions_by_criterion:
+                    prosecutor_opinion = next(
+                        (o for o in opinions_by_criterion[criterion_id] if o.judge == "Prosecutor"),
+                        None,
                     )
+                    tech_lead_opinion = next(
+                        (o for o in opinions_by_criterion[criterion_id] if o.judge == "TechLead"),
+                        None,
+                    )
+                    if prosecutor_opinion:
+                        remediation += f"**Critical Issues:**\n{prosecutor_opinion.argument}\n\n"
+                    if tech_lead_opinion:
+                        remediation += (
+                            f"**Technical Recommendations:**\n{tech_lead_opinion.argument}\n\n"
+                        )
+                remediation += "---\n\n"
 
-            remediation += "---\n\n"
+        if high_tension:
+            remediation += "### Review Required (High Dialectical Tension)\n\n"
+            for criterion_id, variance, prosecutor_opinion in sorted(
+                high_tension, key=lambda item: item[1], reverse=True
+            ):
+                remediation += f"- {criterion_id}: variance={variance}"
+                if prosecutor_opinion:
+                    remediation += f", Prosecutor={prosecutor_opinion.score}/5"
+                remediation += "\n"
+            remediation += "\n"
 
         return remediation
 
