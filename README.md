@@ -250,7 +250,7 @@ automaton-auditor/
 - `langchain`: LLM abstractions
 - `pydantic`: Data validation
 - `gitpython`: Git operations
-- `PyPDF2`: PDF parsing
+- `pypdf`: PDF parsing
 - `rich`: Beautiful console output
 - `typer`: CLI interface
 

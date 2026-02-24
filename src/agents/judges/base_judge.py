@@ -40,7 +40,7 @@ class OfflineJudgeLLM:
     Deterministic local fallback used when no LLM credentials are configured.
     """
 
-    def with_structured_output(self, _schema):
+    def with_structured_output(self, _schema, *args, **kwargs):
         return self
 
     def invoke(self, _messages):
@@ -73,7 +73,7 @@ class BaseJudge(ABC):
 
         # Initialize LLM with structured output
         llm_model = self._build_llm()
-        self.llm = llm_model.with_structured_output(StructuredOpinion)
+        self.llm = self._configure_structured_output(llm_model)
 
         logger.debug(f"Initialized {judge_name} with model {self.config.default_llm_model}")
 
@@ -206,6 +206,18 @@ Your argument must be at least 100 characters and cite specific evidence.
             "No LLM API key configured; using deterministic offline judge fallback."
         )
         return OfflineJudgeLLM()
+
+    def _configure_structured_output(self, llm_model):
+        """
+        Configure structured output with explicit function-calling mode when supported.
+        """
+        try:
+            return llm_model.with_structured_output(
+                StructuredOpinion,
+                method="function_calling",
+            )
+        except TypeError:
+            return llm_model.with_structured_output(StructuredOpinion)
 
     def _format_evidence_for_context(
         self,

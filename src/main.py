@@ -9,7 +9,8 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from .core import create_auditor_graph, get_config, load_rubric
+from .core.config import get_config, load_rubric
+from .core.graph import create_auditor_graph
 from .core.state import RubricConfig
 from .utils.exceptions import AutomatonAuditorException
 from .utils.logger import get_logger

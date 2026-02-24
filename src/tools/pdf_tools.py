@@ -3,10 +3,21 @@ PDF document analysis tools.
 Extracts text and images for forensic analysis.
 """
 
+import warnings
 from pathlib import Path
 from typing import Dict, List, Optional
 
-import PyPDF2
+try:
+    from pypdf import PdfReader
+except ImportError:  # pragma: no cover - compatibility fallback
+    # PyPDF2 emits a deprecation warning at import-time.
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            category=DeprecationWarning,
+            message="PyPDF2 is deprecated.*",
+        )
+        from PyPDF2 import PdfReader
 
 from ..core.state import Evidence
 from ..utils.exceptions import PDFParsingError
@@ -103,7 +114,7 @@ class PDFAnalyzer:
         """
         try:
             with open(pdf_path, "rb") as f:
-                reader = PyPDF2.PdfReader(f)
+                reader = PdfReader(f)
                 text_parts: List[str] = []
 
                 for page_num, page in enumerate(reader.pages):
