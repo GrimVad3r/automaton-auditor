@@ -1,0 +1,194 @@
+"""
+Base Judge class with common functionality for all judge personas.
+"""
+
+from abc import ABC, abstractmethod
+from typing import Dict, List, Literal
+
+from langchain_core.messages import SystemMessage
+from langchain_openai import ChatOpenAI
+from pydantic import BaseModel, Field
+
+from ...core.config import get_config
+from ...core.state import Evidence, JudicialOpinion
+from ...utils.logger import get_logger
+
+logger = get_logger()
+
+
+class StructuredOpinion(BaseModel):
+    """Structured output schema for judicial opinions."""
+
+    criterion_id: str = Field(description="The rubric criterion ID being evaluated")
+    score: int = Field(ge=1, le=5, description="Score on 1-5 scale")
+    argument: str = Field(
+        description="Detailed reasoning for the score (minimum 100 characters)",
+        min_length=100,
+    )
+    cited_evidence: List[str] = Field(
+        description="Specific evidence references that support this opinion"
+    )
+
+
+class BaseJudge(ABC):
+    """
+    Abstract base class for all judge personas.
+    Enforces structured output and provides common utilities.
+    """
+
+    def __init__(self, judge_name: Literal["Prosecutor", "Defense", "TechLead"]):
+        """
+        Initialize base judge.
+
+        Args:
+            judge_name: The persona of this judge
+        """
+        self.judge_name = judge_name
+        self.config = get_config()
+
+        # Initialize LLM with structured output
+        self.llm = ChatOpenAI(
+            model=self.config.default_llm_model,
+            temperature=self.config.llm_temperature,
+        ).with_structured_output(StructuredOpinion)
+
+        logger.debug(f"Initialized {judge_name} with model {self.config.default_llm_model}")
+
+    @abstractmethod
+    def get_system_prompt(self) -> str:
+        """
+        Get the system prompt that defines this judge's persona.
+
+        Returns:
+            System prompt string
+        """
+        pass
+
+    def render_opinion(
+        self,
+        criterion: Dict,
+        evidences: Dict[str, List[Evidence]],
+    ) -> JudicialOpinion:
+        """
+        Render a judicial opinion for a specific criterion.
+
+        Args:
+            criterion: The rubric criterion to evaluate
+            evidences: All evidence collected by detectives
+
+        Returns:
+            JudicialOpinion object
+        """
+        criterion_id = criterion["id"]
+        logger.info(f"{self.judge_name} evaluating criterion: {criterion_id}")
+
+        # Build evidence context
+        evidence_context = self._format_evidence_for_context(evidences, criterion)
+
+        # Get judicial logic for this persona
+        judicial_instruction = criterion["judicial_logic"].get(
+            self.judge_name.lower(), ""
+        )
+
+        # Construct prompt
+        user_message = f"""
+**CRITERION TO EVALUATE:**
+{criterion['name']}
+
+**FORENSIC INSTRUCTION:**
+{criterion['forensic_instruction']}
+
+**YOUR JUDICIAL LOGIC ({self.judge_name}):**
+{judicial_instruction}
+
+**AVAILABLE EVIDENCE:**
+{evidence_context}
+
+**YOUR TASK:**
+As the {self.judge_name}, evaluate this criterion based on the evidence.
+You must return a score (1-5) with detailed reasoning that cites specific evidence.
+
+Score 1: Critical failure / Security violation / Missing entirely
+Score 2: Major gaps / Significant issues
+Score 3: Functional but flawed / Technical debt present
+Score 4: Good implementation / Minor issues only
+Score 5: Excellent / Exceeds expectations
+
+Your argument must be at least 100 characters and cite specific evidence.
+        """
+
+        # Get system prompt
+        system_prompt = self.get_system_prompt()
+
+        try:
+            # Invoke LLM with structured output
+            response: StructuredOpinion = self.llm.invoke(
+                [
+                    SystemMessage(content=system_prompt),
+                    {"role": "user", "content": user_message},
+                ]
+            )
+
+            # Convert to JudicialOpinion
+            opinion = JudicialOpinion(
+                judge=self.judge_name,
+                criterion_id=criterion_id,
+                score=response.score,
+                argument=response.argument,
+                cited_evidence=response.cited_evidence,
+            )
+
+            logger.log_judicial_opinion(self.judge_name, criterion_id, opinion.score)
+
+            return opinion
+
+        except Exception as e:
+            logger.error(f"{self.judge_name} failed to render opinion: {e}", exc_info=True)
+
+            # Return fallback opinion
+            return JudicialOpinion(
+                judge=self.judge_name,
+                criterion_id=criterion_id,
+                score=3,  # Neutral score on error
+                argument=f"Failed to evaluate due to error: {str(e)}. Defaulting to neutral score.",
+                cited_evidence=["error"],
+            )
+
+    def _format_evidence_for_context(
+        self,
+        evidences: Dict[str, List[Evidence]],
+        criterion: Dict,
+    ) -> str:
+        """
+        Format evidence into a readable context string.
+
+        Args:
+            evidences: All collected evidence
+            criterion: The criterion being evaluated
+
+        Returns:
+            Formatted evidence string
+        """
+        # Filter evidence by target artifact
+        target_artifact = criterion.get("target_artifact")
+
+        context_parts = []
+
+        for detective_name, evidence_list in evidences.items():
+            context_parts.append(f"\n## {detective_name} Evidence:\n")
+
+            for evidence in evidence_list:
+                status = "✓ FOUND" if evidence.found else "✗ NOT FOUND"
+                context_parts.append(f"\n{status} [{evidence.location}]")
+                context_parts.append(f"Confidence: {evidence.confidence:.2f}")
+
+                if evidence.content:
+                    # Truncate long content
+                    content = evidence.content[:500]
+                    if len(evidence.content) > 500:
+                        content += "..."
+                    context_parts.append(f"Content: {content}")
+
+                context_parts.append("")  # Blank line
+
+        return "\n".join(context_parts)
