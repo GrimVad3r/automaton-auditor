@@ -85,8 +85,11 @@ Be fair, be technical, be practical."""
         logger.info("Tech Lead beginning evaluation of all criteria")
 
         opinions = []
+        dimensions = (
+            rubric.dimensions if hasattr(rubric, "dimensions") else rubric["dimensions"]
+        )
 
-        for dimension in rubric["dimensions"]:
+        for dimension in dimensions:
             opinion = self.render_opinion(dimension, evidences)
             opinions.append(opinion)
 

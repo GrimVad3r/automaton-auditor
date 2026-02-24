@@ -6,7 +6,7 @@ Uses Pydantic for strict typing and operator reducers for parallel execution saf
 import operator
 from typing import Annotated, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing_extensions import TypedDict
 
 
@@ -23,8 +23,8 @@ class Evidence(BaseModel):
     detective_name: str = Field(description="Name of the detective agent that found this")
     timestamp: Optional[str] = Field(default=None, description="When evidence was collected")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "found": True,
                 "content": "class AgentState(TypedDict):",
@@ -34,6 +34,7 @@ class Evidence(BaseModel):
                 "timestamp": "2024-01-15T10:30:00",
             }
         }
+    )
 
 
 class JudicialOpinion(BaseModel):
@@ -53,8 +54,8 @@ class JudicialOpinion(BaseModel):
     )
     timestamp: Optional[str] = Field(default=None, description="When opinion was rendered")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "judge": "Prosecutor",
                 "criterion_id": "forensic_accuracy_code",
@@ -64,6 +65,7 @@ class JudicialOpinion(BaseModel):
                 "timestamp": "2024-01-15T10:35:00",
             }
         }
+    )
 
 
 class RubricDimension(BaseModel):

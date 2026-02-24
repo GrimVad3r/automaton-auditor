@@ -10,7 +10,7 @@ from typing import List, Optional
 
 from dotenv import load_dotenv
 from pydantic import Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from ..utils.exceptions import ConfigurationError
 from ..utils.logger import get_logger
@@ -53,16 +53,17 @@ class Config(BaseSettings):
     llm_temperature: float = Field(default=0.1, alias="LLM_TEMPERATURE")
     max_retries: int = Field(default=3, alias="MAX_RETRIES")
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+    )
 
     def get_allowed_domains(self) -> List[str]:
         """Parse allowed git domains from comma-separated string."""
         return [d.strip() for d in self.allowed_git_domains.split(",")]
 
-    def validate_configuration(self) -> None:
+    def validate_configuration(self, require_llm_keys: bool = True) -> None:
         """
         Validate that required configuration is present.
 
@@ -71,9 +72,15 @@ class Config(BaseSettings):
         """
         errors = []
 
-        # Check API keys (at least one required)
+        # API keys are required only for judge/LLM execution, not for tool-only flows.
         if not self.openai_api_key and not self.anthropic_api_key:
-            errors.append("No LLM API key configured (OPENAI_API_KEY or ANTHROPIC_API_KEY)")
+            if require_llm_keys:
+                errors.append("No LLM API key configured (OPENAI_API_KEY or ANTHROPIC_API_KEY)")
+            else:
+                logger.warning(
+                    "No LLM API key configured. Tooling and graph setup will work, "
+                    "but judge execution will fail until a key is provided."
+                )
 
         # Check LangSmith if tracing enabled
         if self.langchain_tracing_v2 and not self.langchain_api_key:
@@ -117,7 +124,7 @@ class Config(BaseSettings):
         logger.info("Environment configured")
 
 
-def load_config(env_file: str = ".env") -> Config:
+def load_config(env_file: str = ".env", require_llm_keys: bool = True) -> Config:
     """
     Load configuration from environment file.
 
@@ -135,7 +142,7 @@ def load_config(env_file: str = ".env") -> Config:
 
     # Create and validate config
     config = Config()
-    config.validate_configuration()
+    config.validate_configuration(require_llm_keys=require_llm_keys)
     config.setup_environment()
 
     return config
@@ -181,9 +188,11 @@ def load_rubric(rubric_path: str = "rubric/week2_rubric.json") -> dict:
 _config: Optional[Config] = None
 
 
-def get_config() -> Config:
+def get_config(require_llm_keys: bool = True) -> Config:
     """Get the global configuration instance."""
     global _config
     if _config is None:
-        _config = load_config()
+        _config = load_config(require_llm_keys=require_llm_keys)
+    elif require_llm_keys:
+        _config.validate_configuration(require_llm_keys=True)
     return _config

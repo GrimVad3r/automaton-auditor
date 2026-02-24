@@ -129,7 +129,7 @@ class RepositorySandbox:
     """
 
     def __init__(self):
-        self.config = get_config()
+        self.config = get_config(require_llm_keys=False)
         self.sandbox_root = Path(self.config.sandbox_dir)
         self.sandbox_root.mkdir(parents=True, exist_ok=True)
 

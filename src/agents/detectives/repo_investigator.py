@@ -49,6 +49,10 @@ class RepoInvestigator:
             git_evidences = self.git_analyzer.analyze_repository(repo_url)
             evidence_list.extend(git_evidences.values())
 
+            clone_status = git_evidences.get("clone_status")
+            if clone_status and not clone_status.found:
+                raise ValueError(f"Repository analysis failed for URL: {repo_url}")
+
             for key, evidence in git_evidences.items():
                 logger.log_evidence_found(key, evidence.confidence)
 

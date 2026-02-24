@@ -9,6 +9,11 @@ from langchain_core.messages import SystemMessage
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
+try:
+    from langchain_anthropic import ChatAnthropic
+except ImportError:  # pragma: no cover - optional provider dependency
+    ChatAnthropic = None
+
 from ...core.config import get_config
 from ...core.state import Evidence, JudicialOpinion
 from ...utils.logger import get_logger
@@ -30,6 +35,26 @@ class StructuredOpinion(BaseModel):
     )
 
 
+class OfflineJudgeLLM:
+    """
+    Deterministic local fallback used when no LLM credentials are configured.
+    """
+
+    def with_structured_output(self, _schema):
+        return self
+
+    def invoke(self, _messages):
+        return StructuredOpinion(
+            criterion_id="offline_fallback",
+            score=3,
+            argument=(
+                "No LLM API key configured. Returning a deterministic neutral opinion "
+                "to keep non-network workflows executable."
+            ),
+            cited_evidence=["offline_fallback"],
+        )
+
+
 class BaseJudge(ABC):
     """
     Abstract base class for all judge personas.
@@ -44,13 +69,11 @@ class BaseJudge(ABC):
             judge_name: The persona of this judge
         """
         self.judge_name = judge_name
-        self.config = get_config()
+        self.config = get_config(require_llm_keys=False)
 
         # Initialize LLM with structured output
-        self.llm = ChatOpenAI(
-            model=self.config.default_llm_model,
-            temperature=self.config.llm_temperature,
-        ).with_structured_output(StructuredOpinion)
+        llm_model = self._build_llm()
+        self.llm = llm_model.with_structured_output(StructuredOpinion)
 
         logger.debug(f"Initialized {judge_name} with model {self.config.default_llm_model}")
 
@@ -79,24 +102,29 @@ class BaseJudge(ABC):
         Returns:
             JudicialOpinion object
         """
-        criterion_id = criterion["id"]
+        criterion_data = (
+            criterion.model_dump()
+            if hasattr(criterion, "model_dump")
+            else criterion
+        )
+        criterion_id = criterion_data["id"]
         logger.info(f"{self.judge_name} evaluating criterion: {criterion_id}")
 
         # Build evidence context
-        evidence_context = self._format_evidence_for_context(evidences, criterion)
+        evidence_context = self._format_evidence_for_context(evidences, criterion_data)
 
         # Get judicial logic for this persona
-        judicial_instruction = criterion["judicial_logic"].get(
+        judicial_instruction = criterion_data["judicial_logic"].get(
             self.judge_name.lower(), ""
         )
 
         # Construct prompt
         user_message = f"""
 **CRITERION TO EVALUATE:**
-{criterion['name']}
+{criterion_data['name']}
 
 **FORENSIC INSTRUCTION:**
-{criterion['forensic_instruction']}
+{criterion_data['forensic_instruction']}
 
 **YOUR JUDICIAL LOGIC ({self.judge_name}):**
 {judicial_instruction}
@@ -154,6 +182,31 @@ Your argument must be at least 100 characters and cite specific evidence.
                 cited_evidence=["error"],
             )
 
+    def _build_llm(self):
+        """
+        Build an LLM client based on configured provider credentials.
+        """
+        if self.config.openai_api_key:
+            return ChatOpenAI(
+                model=self.config.default_llm_model,
+                temperature=self.config.llm_temperature,
+            )
+
+        if self.config.anthropic_api_key:
+            if ChatAnthropic is None:
+                raise ValueError(
+                    "ANTHROPIC_API_KEY is set but langchain-anthropic is not installed"
+                )
+            return ChatAnthropic(
+                model="claude-3-5-sonnet-latest",
+                temperature=self.config.llm_temperature,
+            )
+
+        logger.warning(
+            "No LLM API key configured; using deterministic offline judge fallback."
+        )
+        return OfflineJudgeLLM()
+
     def _format_evidence_for_context(
         self,
         evidences: Dict[str, List[Evidence]],
@@ -171,10 +224,20 @@ Your argument must be at least 100 characters and cite specific evidence.
         """
         # Filter evidence by target artifact
         target_artifact = criterion.get("target_artifact")
+        detective_targets = {
+            "RepoInvestigator": "github_repo",
+            "DocAnalyst": "pdf_report",
+            "VisionInspector": "pdf_report",
+            "CrossReference": "pdf_report",
+        }
 
         context_parts = []
 
         for detective_name, evidence_list in evidences.items():
+            if target_artifact and detective_name in detective_targets:
+                if detective_targets[detective_name] != target_artifact:
+                    continue
+
             context_parts.append(f"\n## {detective_name} Evidence:\n")
 
             for evidence in evidence_list:

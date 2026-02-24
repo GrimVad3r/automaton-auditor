@@ -34,6 +34,12 @@ class ChiefJustice:
         opinions = state.get("opinions", [])
         evidences = state.get("evidences", {})
         rubric = state["rubric"]
+        dimensions = rubric.dimensions if hasattr(rubric, "dimensions") else rubric["dimensions"]
+        synthesis_rules = (
+            rubric.synthesis_rules
+            if hasattr(rubric, "synthesis_rules")
+            else rubric["synthesis_rules"]
+        )
 
         logger.info(f"Synthesizing {len(opinions)} judicial opinions")
 
@@ -44,9 +50,12 @@ class ChiefJustice:
         final_scores = {}
         synthesis_notes = []
 
-        for criterion_id, criterion_opinions in opinions_by_criterion.items():
+        for dimension in dimensions:
+            criterion = dimension.model_dump() if hasattr(dimension, "model_dump") else dimension
+            criterion_id = criterion["id"]
+            criterion_opinions = opinions_by_criterion.get(criterion_id, [])
             score, note = self._resolve_criterion(
-                criterion_id, criterion_opinions, rubric["synthesis_rules"]
+                criterion_id, criterion_opinions, synthesis_rules
             )
             final_scores[criterion_id] = score
             synthesis_notes.append(note)
@@ -55,10 +64,9 @@ class ChiefJustice:
         synthesis_summary = self._generate_summary(synthesis_notes, final_scores)
 
         # Generate full report
-        execution_time = (
-            state.get("execution_end_time", time.time())
-            - state.get("execution_start_time", 0)
-        )
+        end_time = state.get("execution_end_time") or time.time()
+        start_time = state.get("execution_start_time") or end_time
+        execution_time = max(0.0, end_time - start_time)
 
         report = MarkdownReportFormatter.format_full_report(
             repo_url=state["repo_url"],

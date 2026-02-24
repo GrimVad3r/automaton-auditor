@@ -76,8 +76,11 @@ from being crushed by perfectionism. Be generous, be encouraging, be fair."""
         logger.info("Defense Attorney beginning evaluation of all criteria")
 
         opinions = []
+        dimensions = (
+            rubric.dimensions if hasattr(rubric, "dimensions") else rubric["dimensions"]
+        )
 
-        for dimension in rubric["dimensions"]:
+        for dimension in dimensions:
             opinion = self.render_opinion(dimension, evidences)
             opinions.append(opinion)
 
