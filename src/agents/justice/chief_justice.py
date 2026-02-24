@@ -70,7 +70,7 @@ class ChiefJustice:
 
         report = MarkdownReportFormatter.format_full_report(
             repo_url=state["repo_url"],
-            pdf_path=state["pdf_path"],
+            pdf_path=state.get("pdf_source", state["pdf_path"]),
             evidences=evidences,
             opinions=opinions,
             final_scores=final_scores,

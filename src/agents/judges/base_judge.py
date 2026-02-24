@@ -50,7 +50,6 @@ class OfflineJudgeLLM:
     """
 
     def with_structured_output(self, _schema, *args, **kwargs):
-    def with_structured_output(self, _schema, *args, **kwargs):
         return self
 
     def invoke(self, _messages):

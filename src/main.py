@@ -6,6 +6,11 @@ Provides CLI interface for running audits.
 import sys
 from datetime import datetime
 from pathlib import Path
+import re
+from typing import Literal
+from urllib.parse import parse_qs, urlparse
+from urllib.request import Request, urlopen
+from uuid import uuid4
 
 import typer
 from rich.console import Console
@@ -25,11 +30,140 @@ console = Console()
 logger = get_logger()
 
 
+def _is_http_url(value: str) -> bool:
+    """Return True when input is an HTTP(S) URL."""
+    parsed = urlparse(value)
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+
+def _extract_google_drive_file_id(url: str) -> str | None:
+    """Extract file ID from common Google Drive sharing URL formats."""
+    parsed = urlparse(url)
+    host = parsed.netloc.lower()
+    if "drive.google.com" not in host:
+        return None
+
+    query_id = parse_qs(parsed.query).get("id", [None])[0]
+    if query_id:
+        return query_id
+
+    match = re.search(r"/file/d/([^/]+)", parsed.path)
+    if match:
+        return match.group(1)
+
+    return None
+
+
+def _normalize_pdf_download_url(url: str) -> str:
+    """Convert Google Drive sharing URLs into direct download URLs."""
+    drive_file_id = _extract_google_drive_file_id(url)
+    if drive_file_id:
+        return f"https://drive.google.com/uc?export=download&id={drive_file_id}"
+    return url
+
+
+def _resolve_local_pdf_path(pdf_input: str) -> Path:
+    """Resolve local PDF path from absolute, relative, or filename-only input."""
+    candidate = Path(pdf_input).expanduser()
+
+    if candidate.is_absolute() and candidate.is_file():
+        return candidate.resolve()
+
+    if not candidate.is_absolute():
+        cwd_candidate = (Path.cwd() / candidate).resolve()
+        if cwd_candidate.is_file():
+            return cwd_candidate
+
+        # Filename-only fallback: search once inside repository tree.
+        if candidate.parent == Path("."):
+            matches = [p.resolve() for p in Path.cwd().rglob(candidate.name) if p.is_file()]
+            if len(matches) == 1:
+                return matches[0]
+            if len(matches) > 1:
+                sample = ", ".join(str(p.relative_to(Path.cwd())) for p in matches[:3])
+                raise AutomatonAuditorException(
+                    f"PDF file name '{pdf_input}' is ambiguous. Matches: {sample}. "
+                    "Provide a full or unique relative path."
+                )
+
+    raise AutomatonAuditorException(
+        f"PDF file not found: '{pdf_input}'. Working directory is '{Path.cwd()}'. "
+        "Use an absolute path, a valid relative path, or an HTTP(S) URL."
+    )
+
+
+def _download_pdf_from_url(pdf_url: str, output_dir: Path) -> Path:
+    """Download remote PDF (including Google Drive) into output cache directory."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    download_url = _normalize_pdf_download_url(pdf_url)
+
+    try:
+        request = Request(download_url, headers={"User-Agent": "AutomatonAuditor/2.0"})
+        with urlopen(request, timeout=30) as response:
+            payload = response.read()
+            content_type = str(response.headers.get("Content-Type", "")).lower()
+    except Exception as e:
+        raise AutomatonAuditorException(f"Failed to download PDF from URL: {e}") from e
+
+    if not payload:
+        raise AutomatonAuditorException("Downloaded PDF is empty")
+
+    if not payload.startswith(b"%PDF"):
+        raise AutomatonAuditorException(
+            f"Downloaded content is not a PDF (content-type: '{content_type or 'unknown'}')"
+        )
+
+    file_name = f"downloaded_report_{uuid4().hex[:10]}.pdf"
+    destination = (output_dir / file_name).resolve()
+    destination.write_bytes(payload)
+    return destination
+
+
+def _resolve_pdf_input(
+    pdf_input: str,
+    output_dir: Path,
+    source_mode: Literal["auto", "local", "remote"] = "auto",
+) -> Path:
+    """Resolve CLI PDF input into a concrete local file path."""
+    cleaned = pdf_input.strip().strip('"').strip("'")
+    is_remote_input = _is_http_url(cleaned)
+
+    if source_mode == "local":
+        if is_remote_input:
+            raise AutomatonAuditorException(
+                "PDF source mode is local, but an HTTP(S) URL was provided."
+            )
+        return _resolve_local_pdf_path(cleaned)
+
+    if source_mode == "remote":
+        if not is_remote_input:
+            raise AutomatonAuditorException(
+                "PDF source mode is remote, but input is not an HTTP(S) URL."
+            )
+        return _download_pdf_from_url(cleaned, output_dir / "_downloads")
+
+    if is_remote_input:
+        return _download_pdf_from_url(cleaned, output_dir / "_downloads")
+    return _resolve_local_pdf_path(cleaned)
+
+
+def _resolve_source_mode(local_pdf: bool, remote_pdf: bool) -> Literal["auto", "local", "remote"]:
+    """Resolve mutually exclusive local/remote CLI flags."""
+    if local_pdf and remote_pdf:
+        raise typer.BadParameter("Use either --local/-l or --remote/-r, not both.")
+    if local_pdf:
+        return "local"
+    if remote_pdf:
+        return "remote"
+    return "auto"
+
+
 def _run_audit(
     repo_url: str,
     pdf_path: str,
     output_dir: str,
     rubric_path: str,
+    pdf_source_mode: Literal["auto", "local", "remote"] = "auto",
 ) -> None:
     """
     Shared audit runner used by both `audit` and `self-audit` commands.
@@ -45,10 +179,13 @@ def _run_audit(
 
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
+    resolved_pdf_path = _resolve_pdf_input(pdf_path, output_path, source_mode=pdf_source_mode)
+    logger.info(f"Resolved PDF path: {resolved_pdf_path}")
 
     initial_state = {
         "repo_url": repo_url,
-        "pdf_path": pdf_path,
+        "pdf_path": str(resolved_pdf_path),
+        "pdf_source": pdf_path,
         "rubric": rubric,
         "evidences": {},
         "opinions": [],
@@ -100,6 +237,18 @@ def _run_audit(
 def audit(
     repo_url: str = typer.Argument(..., help="GitHub repository URL to audit"),
     pdf_path: str = typer.Argument(..., help="Path to PDF architectural report"),
+    local_pdf: bool = typer.Option(
+        False,
+        "--local",
+        "-l",
+        help="Treat pdf_path as a local filesystem path.",
+    ),
+    remote_pdf: bool = typer.Option(
+        False,
+        "--remote",
+        "-r",
+        help="Treat pdf_path as an HTTP(S) URL (including Google Drive links).",
+    ),
     output_dir: str = typer.Option(
         "audit/report_onpeer_generated",
         "--output",
@@ -109,7 +258,6 @@ def audit(
     rubric_path: str = typer.Option(
         "rubric/week2_rubric.json",
         "--rubric",
-        "-r",
         help="Path to rubric JSON file",
     ),
 ):
@@ -120,11 +268,13 @@ def audit(
         python -m src.main audit https://github.com/user/repo report.pdf
     """
     try:
+        pdf_source_mode = _resolve_source_mode(local_pdf, remote_pdf)
         _run_audit(
             repo_url=repo_url,
             pdf_path=pdf_path,
             output_dir=output_dir,
             rubric_path=rubric_path,
+            pdf_source_mode=pdf_source_mode,
         )
     except AutomatonAuditorException as e:
         console.print(f"\n[bold red]Audit failed:[/bold red] {e}\n")
@@ -140,10 +290,21 @@ def audit(
 def self_audit(
     repo_url: str = typer.Argument(..., help="Your own repository URL"),
     pdf_path: str = typer.Argument(..., help="Your architectural report PDF"),
+    local_pdf: bool = typer.Option(
+        False,
+        "--local",
+        "-l",
+        help="Treat pdf_path as a local filesystem path.",
+    ),
+    remote_pdf: bool = typer.Option(
+        False,
+        "--remote",
+        "-r",
+        help="Treat pdf_path as an HTTP(S) URL (including Google Drive links).",
+    ),
     rubric_path: str = typer.Option(
         "rubric/week2_rubric.json",
         "--rubric",
-        "-r",
         help="Path to rubric JSON file",
     ),
 ):
@@ -155,11 +316,13 @@ def self_audit(
     console.print("\n[bold cyan]=== Self-Audit Mode ===[/bold cyan]\n")
 
     try:
+        pdf_source_mode = _resolve_source_mode(local_pdf, remote_pdf)
         _run_audit(
             repo_url=repo_url,
             pdf_path=pdf_path,
             output_dir="audit/report_onself_generated",
             rubric_path=rubric_path,
+            pdf_source_mode=pdf_source_mode,
         )
     except AutomatonAuditorException as e:
         console.print(f"\n[bold red]Self-audit failed:[/bold red] {e}\n")
