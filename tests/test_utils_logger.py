@@ -3,7 +3,6 @@ Tests for logging utilities.
 """
 
 import logging
-import re
 
 import pytest
 
@@ -195,7 +194,9 @@ class TestAuditorLogger:
         logger = AuditorLogger()
 
         with caplog.at_level(logging.CRITICAL):
-            logger.log_security_violation("Command Injection", "Detected shell metacharacter")
+            logger.log_security_violation(
+                "Command Injection", "Detected shell metacharacter"
+            )
 
         assert "SECURITY VIOLATION" in caplog.text
         assert "Command Injection" in caplog.text

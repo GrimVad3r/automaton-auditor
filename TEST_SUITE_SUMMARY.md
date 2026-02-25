@@ -334,7 +334,7 @@
 - Linting (ruff, black)
 - Type checking (mypy)
 - Coverage reporting (Codecov)
-- Security scanning (bandit, safety)
+- Security scanning (bandit, pip-audit)
 - Test result artifacts
 
 **Lines:** ~80
@@ -387,13 +387,13 @@ Overall:               ~75%  ✅
 
 ```bash
 # Install dependencies
-pip install -e ".[dev]"
+uv sync --frozen --extra dev
 
 # Run all tests
-pytest
+uv run pytest
 
 # Run with coverage
-pytest --cov=src --cov-report=html
+uv run pytest --cov=src --cov-report=html
 
 # Run fast tests only
 ./run_tests.sh fast
@@ -490,7 +490,7 @@ pytest --cov=src --cov-report=html
 5. **Run type checking** (mypy)
 6. **Run tests with coverage**
 7. **Upload coverage** (Codecov)
-8. **Security scan** (bandit, safety)
+8. **Security scan** (bandit, pip-audit)
 9. **Upload artifacts** (test results, coverage)
 
 **Platforms:** Ubuntu, macOS, Windows
@@ -501,17 +501,17 @@ pytest --cov=src --cov-report=html
 
 1. **Install development dependencies:**
    ```bash
-   pip install -e ".[dev]"
+   uv sync --frozen --extra dev
    ```
 
 2. **Run tests to verify installation:**
    ```bash
-   pytest
+   uv run pytest
    ```
 
 3. **Review coverage:**
    ```bash
-   pytest --cov=src --cov-report=html
+   uv run pytest --cov=src --cov-report=html
    open htmlcov/index.html
    ```
 

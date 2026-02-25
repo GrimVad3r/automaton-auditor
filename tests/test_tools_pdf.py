@@ -3,7 +3,6 @@ Tests for PDF analysis tools.
 """
 
 import pytest
-from pathlib import Path
 
 from src.tools.pdf_tools import PDFAnalyzer
 from src.utils.exceptions import PDFParsingError
@@ -85,7 +84,10 @@ class TestPDFAnalyzer:
 
         assert "file_references" in evidences
         assert evidences["file_references"].found is True
-        assert "src/agents/detectives/repo_investigator.py" in evidences["file_references"].content
+        assert (
+            "src/agents/detectives/repo_investigator.py"
+            in evidences["file_references"].content
+        )
         assert "src/tools/git_tools.py" in evidences["file_references"].content
 
     def test_extract_file_references_none(self, analyzer, temp_dir):

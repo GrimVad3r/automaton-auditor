@@ -29,6 +29,7 @@ class TestConfig:
         assert config.llm_max_evidence_items_per_detective > 0
         assert config.llm_max_evidence_content_chars > 0
         assert config.llm_max_context_chars > 0
+        assert config.enable_vision_inspector is False
 
     def test_config_from_env(self, test_env):
         """Test configuration loading from environment."""
@@ -173,13 +174,11 @@ MAX_REPO_SIZE_MB=200
         monkeypatch.delenv("HUGGINGFACE_API_KEY", raising=False)
 
         env_file = temp_dir / ".env"
-        env_file.write_text(
-            """
+        env_file.write_text("""
 OPENAI_API_KEY=NA
 ANTHROPIC_API_KEY=NA
 GROQ_API_KEY=gsk-test-key
-"""
-        )
+""")
 
         config = load_config(str(env_file))
         assert config.openai_api_key is None
@@ -194,14 +193,12 @@ GROQ_API_KEY=gsk-test-key
         monkeypatch.delenv("HUGGINGFACE_API_KEY", raising=False)
 
         env_file = temp_dir / ".env"
-        env_file.write_text(
-            """
+        env_file.write_text("""
 OPENAI_API_KEY=NA
 ANTHROPIC_API_KEY=NA
 GROQ_API_KEY=NA
 HUGGINGFACE_API_KEY=hf-test-key
-"""
-        )
+""")
 
         config = load_config(str(env_file))
         assert config.openai_api_key is None
@@ -286,10 +283,11 @@ class TestConfigurationIntegration:
 
     def test_config_singleton_pattern(self, test_env):
         """Test that get_config returns singleton."""
-        from src.core.config import get_config, _config
+        from src.core.config import get_config
 
         # Reset singleton
         import src.core.config
+
         src.core.config._config = None
 
         config1 = get_config()

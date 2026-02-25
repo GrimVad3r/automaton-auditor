@@ -2,8 +2,6 @@
 Tests for CLI input resolution helpers in src.main.
 """
 
-from pathlib import Path
-
 import pytest
 import typer
 
@@ -32,10 +30,16 @@ class TestSourceMode:
     """Tests for explicit source-mode selection flags."""
 
     def test_resolve_source_mode_local(self):
-        assert main_module._resolve_source_mode(local_pdf=True, remote_pdf=False) == "local"
+        assert (
+            main_module._resolve_source_mode(local_pdf=True, remote_pdf=False)
+            == "local"
+        )
 
     def test_resolve_source_mode_remote(self):
-        assert main_module._resolve_source_mode(local_pdf=False, remote_pdf=True) == "remote"
+        assert (
+            main_module._resolve_source_mode(local_pdf=False, remote_pdf=True)
+            == "remote"
+        )
 
     def test_resolve_source_mode_both_flags_error(self):
         with pytest.raises(typer.BadParameter):

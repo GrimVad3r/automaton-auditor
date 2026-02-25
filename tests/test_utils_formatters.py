@@ -187,7 +187,10 @@ class TestMarkdownReportFormatter:
 
         remediation = MarkdownReportFormatter._generate_remediation(final_scores, {})
 
-        assert "All criteria met expectations" in remediation or "No immediate remediation" in remediation
+        assert (
+            "All criteria met expectations" in remediation
+            or "No immediate remediation" in remediation
+        )
 
     def test_generate_remediation_high_tension_even_with_high_scores(self):
         """High score criteria should still be flagged when judge variance is severe."""
@@ -228,11 +231,11 @@ class TestMarkdownReportFormatter:
         """Test dialectics summary generation."""
         evidences, opinions, final_scores = sample_data
 
-        opinions_by_criterion = {
-            "langgraph_architecture": opinions
-        }
+        opinions_by_criterion = {"langgraph_architecture": opinions}
 
-        summary = MarkdownReportFormatter._generate_dialectics_summary(opinions_by_criterion)
+        summary = MarkdownReportFormatter._generate_dialectics_summary(
+            opinions_by_criterion
+        )
 
         assert "dialectical" in summary.lower()
         assert "langgraph_architecture" in summary

@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Generator, List, Optional, Tuple
 
 from ..core.config import get_config
-from ..utils.exceptions import CommandInjectionError, ResourceLimitError, TimeoutError
+from ..utils.exceptions import ResourceLimitError, TimeoutError
 from ..utils.logger import get_logger
 from ..utils.validators import SecurityValidator
 
@@ -92,7 +92,7 @@ class SandboxedExecutor:
 
             return result.returncode, result.stdout, result.stderr
 
-        except subprocess.TimeoutExpired as e:
+        except subprocess.TimeoutExpired:
             logger.error(f"Command timed out after {timeout}s: {command}")
             raise TimeoutError(f"Command exceeded timeout of {timeout}s")
 
@@ -121,7 +121,12 @@ class SandboxedExecutor:
                 return ["cmd", "/c", "dir"] + args
             if cmd == "sleep":
                 seconds = args[0] if args else "1"
-                return ["powershell", "-NoProfile", "-Command", f"Start-Sleep -Seconds {seconds}"]
+                return [
+                    "powershell",
+                    "-NoProfile",
+                    "-Command",
+                    f"Start-Sleep -Seconds {seconds}",
+                ]
 
         return command
 
@@ -219,7 +224,9 @@ class RepositorySandbox:
                     size_bytes = SecurityValidator.validate_directory_size(
                         repo_path, max_size_mb=self.config.max_repo_size_mb
                     )
-                    logger.info(f"Repository cloned successfully ({size_bytes / 1024 / 1024:.2f}MB)")
+                    logger.info(
+                        f"Repository cloned successfully ({size_bytes / 1024 / 1024:.2f}MB)"
+                    )
                 except ResourceLimitError as e:
                     logger.error(f"Repository size validation failed: {e}")
                     yield (False, None, str(e))
@@ -235,7 +242,9 @@ class RepositorySandbox:
                 logger.error(f"Unexpected error during clone: {e}", exc_info=True)
                 yield (False, None, f"Clone failed: {e}")
 
-    def analyze_git_history(self, repo_path: Path) -> Tuple[bool, Optional[List[dict]], Optional[str]]:
+    def analyze_git_history(
+        self, repo_path: Path
+    ) -> Tuple[bool, Optional[List[dict]], Optional[str]]:
         """
         Analyze git commit history.
 

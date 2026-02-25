@@ -264,7 +264,7 @@ The project includes a CI/CD workflow that:
    - Linting (ruff, black)
    - Type checking (mypy)
    - Unit tests with coverage
-   - Security scanning (bandit, safety)
+   - Security scanning (bandit, pip-audit)
 
 ### Workflow File
 
@@ -452,17 +452,17 @@ pytest -n 4     # Use 4 workers
 
 3. **Reinstall dependencies**
    ```bash
-   pip install -e ".[dev]"
+   uv sync --frozen --extra dev
    ```
 
 ### Import Errors
 
 ```bash
 # Install package in development mode
-pip install -e .
+uv sync --frozen --extra dev
 
 # Verify installation
-python -c "import src; print('OK')"
+uv run python -c "import src; print('OK')"
 ```
 
 ### Coverage Not Working

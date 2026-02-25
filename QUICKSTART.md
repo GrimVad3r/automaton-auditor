@@ -4,12 +4,11 @@
 
 ### 1. Install Dependencies
 ```bash
-# Create and activate virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+# Install uv (once)
+python -m pip install --upgrade uv
 
-# Install the package
-pip install -e .
+# Install locked dependencies
+uv sync --frozen --extra dev
 ```
 
 ### 2. Configure API Keys
@@ -35,7 +34,7 @@ LANGCHAIN_API_KEY=ls-...
 ### 3. Verify Installation
 ```bash
 # Check version
-python -m src.main version
+uv run python -m src.main version
 
 # Should output:
 # Automaton Auditor v2.0.0
@@ -46,14 +45,14 @@ python -m src.main version
 
 ### Example 1: Audit a GitHub Repository
 ```bash
-python -m src.main audit \
+uv run python -m src.main audit \
   https://github.com/example/week2-submission \
   example_report.pdf
 ```
 
 ### Example 2: Self-Assessment
 ```bash
-python -m src.main self-audit \
+uv run python -m src.main self-audit \
   https://github.com/your-username/your-repo \
   your_report.pdf
 ```
@@ -89,8 +88,8 @@ The audit generates a Markdown report in `audit/report_onpeer_generated/audit_re
 → Check network connectivity
 
 ### "Module not found"
-→ Run `pip install -e .` again
-→ Ensure virtual environment is activated
+→ Run `uv sync --frozen --extra dev` again
+→ Run commands through `uv run ...`
 
 ### "LangSmith tracing failed"
 → Add `LANGCHAIN_API_KEY` to `.env`
@@ -100,7 +99,7 @@ The audit generates a Markdown report in `audit/report_onpeer_generated/audit_re
 
 1. **Review the rubric**: `rubric/week2_rubric.json`
 2. **Customize settings**: Edit `.env` for your needs
-3. **Run tests**: `pytest`
+3. **Run tests**: `uv run pytest`
 4. **Read full docs**: `README.md`
 
 ## Support

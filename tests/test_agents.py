@@ -3,7 +3,8 @@ Tests for agent implementations.
 """
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from contextlib import nullcontext
+from unittest.mock import Mock, patch
 
 from src.agents.detectives import RepoInvestigator, DocAnalyst
 from src.agents.judges import Prosecutor, Defense, TechLead
@@ -21,12 +22,26 @@ class TestRepoInvestigator:
         assert detective.git_analyzer is not None
 
     @pytest.mark.slow
-    def test_investigate_structure(self, sample_agent_state):
+    def test_investigate_structure(self, sample_agent_state, temp_dir):
         """Test investigation returns correct structure."""
         detective = RepoInvestigator()
+        repo_path = temp_dir / "repo"
+        repo_path.mkdir()
 
-        # Mock the git analyzer to avoid actual cloning
-        with patch.object(detective.git_analyzer, "analyze_repository") as mock_analyze:
+        # Mock repository clone + analysis to avoid network calls.
+        with (
+            patch.object(
+                detective.git_analyzer.sandbox,
+                "clone_repository",
+                return_value=nullcontext((True, repo_path, None)),
+            ),
+            patch.object(detective.git_analyzer, "analyze_repository") as mock_analyze,
+            patch.object(
+                detective,
+                "_analyze_code_structure",
+                return_value=[],
+            ),
+        ):
             mock_analyze.return_value = {
                 "test_evidence": Evidence(
                     found=True,
@@ -41,6 +56,9 @@ class TestRepoInvestigator:
 
             assert "evidences" in result
             assert "RepoInvestigator" in result["evidences"]
+            mock_analyze.assert_called_once_with(
+                sample_agent_state["repo_url"], repo_path=repo_path
+            )
 
     def test_investigate_error_handling(self, sample_agent_state):
         """Test error handling during investigation."""
@@ -239,7 +257,9 @@ class TestProsecutor:
             cited_evidence=["src/graph.py"],
         )
 
-        with patch.object(judge, "_invoke_with_fallback", return_value=grounded_response):
+        with patch.object(
+            judge, "_invoke_with_fallback", return_value=grounded_response
+        ):
             opinion = judge.render_opinion(criterion, evidences)
 
         assert "[UNVERIFIED_PATH]" in opinion.argument
@@ -274,7 +294,9 @@ class TestProsecutor:
             cited_evidence=["src/core/state.py"],
         )
 
-        with patch.object(judge, "_invoke_with_fallback", return_value=grounded_response):
+        with patch.object(
+            judge, "_invoke_with_fallback", return_value=grounded_response
+        ):
             opinion = judge.render_opinion(criterion, evidences)
 
         assert "90% similarity" not in opinion.argument
@@ -306,7 +328,9 @@ class TestProsecutor:
             cited_evidence=["src/tools/"],
         )
 
-        with patch.object(judge, "_invoke_with_fallback", return_value=grounded_response):
+        with patch.object(
+            judge, "_invoke_with_fallback", return_value=grounded_response
+        ):
             opinion = judge.render_opinion(criterion, evidences)
 
         assert "src/tools/" not in opinion.cited_evidence

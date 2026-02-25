@@ -58,12 +58,6 @@ class DocAnalyst:
             for key, evidence in pdf_evidences.items():
                 logger.log_evidence_found(key, evidence.confidence)
 
-            # Cross-reference with RepoInvestigator findings
-            if "evidences" in state and "RepoInvestigator" in state["evidences"]:
-                logger.info("Cross-referencing PDF claims with code evidence")
-                cross_ref_evidences = self._cross_reference_claims(state, pdf_file)
-                evidence_list.extend(cross_ref_evidences)
-
             duration = time.time() - start_time
             logger.log_node_complete("DocAnalyst", duration)
             logger.clear_context()
@@ -80,63 +74,6 @@ class DocAnalyst:
             logger.clear_context()
 
             raise NodeExecutionError("DocAnalyst", e)
-
-    def _cross_reference_claims(self, state: AgentState, pdf_file: Path) -> List[Evidence]:
-        """
-        Cross-reference claims in PDF against actual code artifacts.
-
-        Args:
-            state: Current graph state with RepoInvestigator evidence
-            pdf_file: Path to PDF file
-
-        Returns:
-            List of Evidence objects about claim verification
-        """
-        evidences: List[Evidence] = []
-
-        try:
-            # Extract text from PDF for analysis
-            pdf_text = self.pdf_analyzer._extract_text(pdf_file)
-
-            # Get verified files from RepoInvestigator
-            repo_evidences = state["evidences"]["RepoInvestigator"]
-
-            # Extract files that were found
-            verified_files = []
-            for evidence in repo_evidences:
-                if evidence.found and evidence.location:
-                    # Extract file path from location
-                    location = evidence.location
-                    if "/" in location or "\\" in location:
-                        verified_files.append(location)
-
-            # Perform cross-reference
-            cross_ref = self.pdf_analyzer.cross_reference_claims(pdf_text, verified_files)
-            evidences.extend(cross_ref.values())
-
-            # Log results
-            if "hallucinated_claims" in cross_ref:
-                hallucination_evidence = cross_ref["hallucinated_claims"]
-                if hallucination_evidence.found:
-                    logger.warning(
-                        f"HALLUCINATION DETECTED: {hallucination_evidence.content}"
-                    )
-                else:
-                    logger.info("All PDF claims verified against code artifacts")
-
-        except Exception as e:
-            logger.warning(f"Cross-reference analysis failed: {e}")
-            evidences.append(
-                Evidence(
-                    found=False,
-                    content=f"Cross-reference failed: {str(e)}",
-                    location=str(pdf_file),
-                    confidence=0.3,
-                    detective_name="DocAnalyst",
-                )
-            )
-
-        return evidences
 
 
 # Node function for LangGraph

@@ -44,7 +44,9 @@ class ASTAnalyzer:
 
         # Validate file path for security
         try:
-            validated_path = SecurityValidator.validate_file_path(str(file_path), self.base_dir)
+            validated_path = SecurityValidator.validate_file_path(
+                str(file_path), self.base_dir
+            )
         except PathTraversalError:
             # Security-critical validation failures should be explicit.
             raise
@@ -172,7 +174,9 @@ class ASTAnalyzer:
         functions: List[str] = []
 
         for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef) or isinstance(node, ast.AsyncFunctionDef):
+            if isinstance(node, ast.FunctionDef) or isinstance(
+                node, ast.AsyncFunctionDef
+            ):
                 functions.append(node.name)
 
         if functions:
@@ -186,7 +190,9 @@ class ASTAnalyzer:
 
         return evidences
 
-    def _analyze_security_patterns(self, tree: ast.AST, file_path: Path) -> Dict[str, Evidence]:
+    def _analyze_security_patterns(
+        self, tree: ast.AST, file_path: Path
+    ) -> Dict[str, Evidence]:
         """Detect potential security issues."""
         evidences: Dict[str, Evidence] = {}
         security_issues: List[str] = []
@@ -200,12 +206,16 @@ class ASTAnalyzer:
                         and node.func.value.id == "os"
                         and node.func.attr == "system"
                     ):
-                        security_issues.append(f"os.system() call at line {node.lineno}")
+                        security_issues.append(
+                            f"os.system() call at line {node.lineno}"
+                        )
 
                 # Check for subprocess with shell=True
                 if isinstance(node.func, ast.Attribute) and node.func.attr == "run":
                     for keyword in node.keywords:
-                        if keyword.arg == "shell" and isinstance(keyword.value, ast.Constant):
+                        if keyword.arg == "shell" and isinstance(
+                            keyword.value, ast.Constant
+                        ):
                             if keyword.value.value is True:
                                 security_issues.append(
                                     f"subprocess with shell=True at line {node.lineno}"
@@ -241,7 +251,9 @@ class ASTAnalyzer:
             Evidence about LangGraph architecture, or None if not found
         """
         try:
-            validated_path = SecurityValidator.validate_file_path(str(file_path), self.base_dir)
+            validated_path = SecurityValidator.validate_file_path(
+                str(file_path), self.base_dir
+            )
 
             with open(validated_path, "r", encoding="utf-8") as f:
                 source = f.read()
@@ -251,7 +263,6 @@ class ASTAnalyzer:
             # Look for StateGraph instantiation
             has_state_graph = False
             has_add_node = False
-            has_add_edge = False
             parallel_execution = False
 
             for node in ast.walk(tree):
@@ -264,9 +275,6 @@ class ASTAnalyzer:
                 if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
                     if node.func.attr == "add_node":
                         has_add_node = True
-                    elif node.func.attr == "add_edge":
-                        has_add_edge = True
-
             # Heuristic: If multiple add_node calls, likely has parallelism
             if has_state_graph and has_add_node:
                 # Count number of times nodes are added

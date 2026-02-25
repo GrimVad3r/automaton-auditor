@@ -129,29 +129,42 @@ class AuditorLogger:
         self.logger.warning(self._format_message(message), extra=kwargs)
 
     def error(self, message: str, exc_info: bool = False, **kwargs: Any) -> None:
-        self.logger.error(self._format_message(message), exc_info=exc_info, extra=kwargs)
+        self.logger.error(
+            self._format_message(message), exc_info=exc_info, extra=kwargs
+        )
 
     def critical(self, message: str, exc_info: bool = True, **kwargs: Any) -> None:
-        self.logger.critical(self._format_message(message), exc_info=exc_info, extra=kwargs)
+        self.logger.critical(
+            self._format_message(message), exc_info=exc_info, extra=kwargs
+        )
 
     def log_node_start(self, node_name: str) -> None:
         self.info(f"[bold blue]Starting node:[/bold blue] {node_name}")
 
     def log_node_complete(self, node_name: str, duration: float) -> None:
-        self.info(f"[bold green]Completed node:[/bold green] {node_name} ({duration:.2f}s)")
+        self.info(
+            f"[bold green]Completed node:[/bold green] {node_name} ({duration:.2f}s)"
+        )
 
     def log_node_error(self, node_name: str, error: Exception) -> None:
-        self.error(f"[bold red]Node failed:[/bold red] {node_name} - {str(error)}", exc_info=True)
+        self.error(
+            f"[bold red]Node failed:[/bold red] {node_name} - {str(error)}",
+            exc_info=True,
+        )
 
     def log_evidence_found(self, evidence_type: str, confidence: float) -> None:
-        confidence_color = "green" if confidence > 0.8 else "yellow" if confidence > 0.5 else "red"
+        confidence_color = (
+            "green" if confidence > 0.8 else "yellow" if confidence > 0.5 else "red"
+        )
         self.info(
             f"[bold {confidence_color}]Evidence found:[/bold {confidence_color}] "
             f"{evidence_type} (confidence: {confidence:.2f})"
         )
 
     def log_judicial_opinion(self, judge: str, criterion: str, score: int) -> None:
-        self.info(f"[bold magenta]{judge}:[/bold magenta] {criterion} -> Score: {score}")
+        self.info(
+            f"[bold magenta]{judge}:[/bold magenta] {criterion} -> Score: {score}"
+        )
 
     def log_security_violation(self, violation_type: str, details: str) -> None:
         self.critical(

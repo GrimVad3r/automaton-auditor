@@ -28,7 +28,9 @@ class Config(BaseSettings):
     openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
     anthropic_api_key: Optional[str] = Field(default=None, alias="ANTHROPIC_API_KEY")
     groq_api_key: Optional[str] = Field(default=None, alias="GROQ_API_KEY")
-    huggingface_api_key: Optional[str] = Field(default=None, alias="HUGGINGFACE_API_KEY")
+    huggingface_api_key: Optional[str] = Field(
+        default=None, alias="HUGGINGFACE_API_KEY"
+    )
 
     # LangSmith Configuration
     langchain_tracing_v2: bool = Field(default=True, alias="LANGCHAIN_TRACING_V2")
@@ -36,13 +38,18 @@ class Config(BaseSettings):
         default="https://api.smith.langchain.com", alias="LANGCHAIN_ENDPOINT"
     )
     langchain_api_key: Optional[str] = Field(default=None, alias="LANGCHAIN_API_KEY")
-    langchain_project: str = Field(default="automaton-auditor", alias="LANGCHAIN_PROJECT")
+    langchain_project: str = Field(
+        default="automaton-auditor", alias="LANGCHAIN_PROJECT"
+    )
 
     # Application Settings
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     max_repo_size_mb: int = Field(default=500, alias="MAX_REPO_SIZE_MB")
     git_clone_timeout: int = Field(default=60, alias="GIT_CLONE_TIMEOUT")
     sandbox_dir: str = Field(default="/tmp/auditor_sandbox", alias="SANDBOX_DIR")
+    enable_vision_inspector: bool = Field(
+        default=False, alias="ENABLE_VISION_INSPECTOR"
+    )
 
     # Security Settings
     allowed_git_domains: str = Field(
@@ -51,7 +58,9 @@ class Config(BaseSettings):
     max_file_size_mb: int = Field(default=10, alias="MAX_FILE_SIZE_MB")
 
     # LLM Settings
-    default_llm_model: str = Field(default="gpt-4-turbo-preview", alias="DEFAULT_LLM_MODEL")
+    default_llm_model: str = Field(
+        default="gpt-4-turbo-preview", alias="DEFAULT_LLM_MODEL"
+    )
     default_groq_model: str = Field(
         default="llama-3.1-8b-instant", alias="DEFAULT_GROQ_MODEL"
     )
@@ -70,8 +79,12 @@ class Config(BaseSettings):
         default=160, alias="LLM_MAX_EVIDENCE_CONTENT_CHARS"
     )
     llm_max_context_chars: int = Field(default=2400, alias="LLM_MAX_CONTEXT_CHARS")
-    llm_retry_base_delay_seconds: float = Field(default=1.0, alias="LLM_RETRY_BASE_DELAY_SECONDS")
-    llm_retry_max_delay_seconds: float = Field(default=8.0, alias="LLM_RETRY_MAX_DELAY_SECONDS")
+    llm_retry_base_delay_seconds: float = Field(
+        default=1.0, alias="LLM_RETRY_BASE_DELAY_SECONDS"
+    )
+    llm_retry_max_delay_seconds: float = Field(
+        default=8.0, alias="LLM_RETRY_MAX_DELAY_SECONDS"
+    )
     max_retries: int = Field(default=3, alias="MAX_RETRIES")
 
     model_config = SettingsConfigDict(
@@ -163,10 +176,14 @@ class Config(BaseSettings):
             errors.append("LLM_RETRY_MAX_DELAY_SECONDS must be positive")
 
         if self.llm_retry_max_delay_seconds < self.llm_retry_base_delay_seconds:
-            errors.append("LLM_RETRY_MAX_DELAY_SECONDS must be >= LLM_RETRY_BASE_DELAY_SECONDS")
+            errors.append(
+                "LLM_RETRY_MAX_DELAY_SECONDS must be >= LLM_RETRY_BASE_DELAY_SECONDS"
+            )
 
         if errors:
-            raise ConfigurationError(f"Configuration validation failed: {'; '.join(errors)}")
+            raise ConfigurationError(
+                f"Configuration validation failed: {'; '.join(errors)}"
+            )
 
         logger.info("Configuration validated successfully")
 

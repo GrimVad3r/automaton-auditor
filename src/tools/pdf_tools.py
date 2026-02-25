@@ -17,7 +17,7 @@ except ImportError:  # pragma: no cover - compatibility fallback
             category=DeprecationWarning,
             message="PyPDF2 is deprecated.*",
         )
-        from PyPDF2 import PdfReader
+        from PyPDF2 import PdfReader  # type: ignore[import-not-found,no-redef]
 
 from ..core.state import Evidence
 from ..utils.exceptions import PDFParsingError
@@ -56,7 +56,9 @@ class PDFAnalyzer:
 
         # Validate file path
         try:
-            validated_path = SecurityValidator.validate_file_path(str(pdf_path), self.base_dir)
+            validated_path = SecurityValidator.validate_file_path(
+                str(pdf_path), self.base_dir
+            )
             SecurityValidator.validate_file_size(validated_path)
         except Exception as e:
             logger.error(f"PDF validation failed: {e}")
@@ -122,7 +124,9 @@ class PDFAnalyzer:
                         page_text = page.extract_text()
                         text_parts.append(page_text)
                     except Exception as e:
-                        logger.warning(f"Failed to extract text from page {page_num}: {e}")
+                        logger.warning(
+                            f"Failed to extract text from page {page_num}: {e}"
+                        )
                         continue
 
                 full_text = "\n".join(text_parts)
@@ -153,8 +157,17 @@ class PDFAnalyzer:
                 "antithesis",
                 "synthesis",
             ],
-            "metacognition": ["metacognition", "thinking about thinking", "meta-cognitive"],
-            "fan_out_fan_in": ["fan-out", "fan-in", "parallel execution", "parallelism"],
+            "metacognition": [
+                "metacognition",
+                "thinking about thinking",
+                "meta-cognitive",
+            ],
+            "fan_out_fan_in": [
+                "fan-out",
+                "fan-in",
+                "parallel execution",
+                "parallelism",
+            ],
             "state_synchronization": [
                 "state synchronization",
                 "state reducer",
@@ -185,7 +198,7 @@ class PDFAnalyzer:
             else:
                 evidences[f"concept_{concept_id}"] = Evidence(
                     found=False,
-                    content=f"Concept not mentioned in document",
+                    content="Concept not mentioned in document",
                     location=str(pdf_path),
                     confidence=0.6,
                     detective_name="PDFAnalyzer",
@@ -193,7 +206,9 @@ class PDFAnalyzer:
 
         return evidences
 
-    def _extract_file_references(self, text: str, pdf_path: Path) -> Dict[str, Evidence]:
+    def _extract_file_references(
+        self, text: str, pdf_path: Path
+    ) -> Dict[str, Evidence]:
         """
         Extract file path references from PDF.
 
@@ -263,14 +278,18 @@ class PDFAnalyzer:
             like `src/core/graph.py` for fair claim verification.
             """
             normalized = normalize_path(value)
-            match = re.search(r"(?:^|/)((?:src|lib|app|tools|agents)/[\w/.-]+)", normalized)
+            match = re.search(
+                r"(?:^|/)((?:src|lib|app|tools|agents)/[\w/.-]+)", normalized
+            )
             if match:
                 return match.group(1)
             return None
 
         # Extract file references
         file_pattern = r"(?:src|lib|app|tools|agents)/[\w/.-]+"
-        claimed_files = {normalize_path(match) for match in re.findall(file_pattern, text)}
+        claimed_files = {
+            normalize_path(match) for match in re.findall(file_pattern, text)
+        }
 
         if not claimed_files:
             return evidences

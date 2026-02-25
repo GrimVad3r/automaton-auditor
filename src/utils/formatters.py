@@ -46,9 +46,9 @@ class MarkdownReportFormatter:
 
         report = f"""# Automaton Auditor Report
 
-**Generated:** {timestamp}  
-**Execution Time:** {execution_time:.2f} seconds  
-**Repository:** {repo_url}  
+**Generated:** {timestamp}<br>
+**Execution Time:** {execution_time:.2f} seconds<br>
+**Repository:** {repo_url}<br>
 **Report Document:** {pdf_path}
 
 ---
@@ -100,11 +100,15 @@ class MarkdownReportFormatter:
             report += "---\n\n"
 
         report += "## Remediation Plan\n\n"
-        report += MarkdownReportFormatter._generate_remediation(final_scores, opinions_by_criterion)
+        report += MarkdownReportFormatter._generate_remediation(
+            final_scores, opinions_by_criterion
+        )
 
         report += "\n---\n\n"
         report += "## Appendix: Dialectical Process\n\n"
-        report += MarkdownReportFormatter._generate_dialectics_summary(opinions_by_criterion)
+        report += MarkdownReportFormatter._generate_dialectics_summary(
+            opinions_by_criterion
+        )
 
         return report
 
@@ -140,19 +144,27 @@ class MarkdownReportFormatter:
                 remediation += f"#### {criterion_id} (Score: {score}/5)\n\n"
                 if criterion_id in opinions_by_criterion:
                     prosecutor_opinion = next(
-                        (o for o in opinions_by_criterion[criterion_id] if o.judge == "Prosecutor"),
+                        (
+                            o
+                            for o in opinions_by_criterion[criterion_id]
+                            if o.judge == "Prosecutor"
+                        ),
                         None,
                     )
                     tech_lead_opinion = next(
-                        (o for o in opinions_by_criterion[criterion_id] if o.judge == "TechLead"),
+                        (
+                            o
+                            for o in opinions_by_criterion[criterion_id]
+                            if o.judge == "TechLead"
+                        ),
                         None,
                     )
                     if prosecutor_opinion:
-                        remediation += f"**Critical Issues:**\n{prosecutor_opinion.argument}\n\n"
-                    if tech_lead_opinion:
                         remediation += (
-                            f"**Technical Recommendations:**\n{tech_lead_opinion.argument}\n\n"
+                            f"**Critical Issues:**\n{prosecutor_opinion.argument}\n\n"
                         )
+                    if tech_lead_opinion:
+                        remediation += f"**Technical Recommendations:**\n{tech_lead_opinion.argument}\n\n"
                 remediation += "---\n\n"
 
         if high_tension:
@@ -170,7 +182,7 @@ class MarkdownReportFormatter:
 
     @staticmethod
     def _generate_dialectics_summary(
-        opinions_by_criterion: Dict[str, List[JudicialOpinion]]
+        opinions_by_criterion: Dict[str, List[JudicialOpinion]],
     ) -> str:
         """Summarize the dialectical process."""
         summary = "This section documents the dialectical reasoning process.\n\n"
@@ -181,9 +193,13 @@ class MarkdownReportFormatter:
 
             if variance > 1:
                 summary += f"### {criterion_id}\n\n"
-                summary += f"**Score Variance:** {variance} (High dialectical tension)\n\n"
+                summary += (
+                    f"**Score Variance:** {variance} (High dialectical tension)\n\n"
+                )
 
-                prosecutor = next((o for o in opinions if o.judge == "Prosecutor"), None)
+                prosecutor = next(
+                    (o for o in opinions if o.judge == "Prosecutor"), None
+                )
                 defense = next((o for o in opinions if o.judge == "Defense"), None)
 
                 if prosecutor and defense:

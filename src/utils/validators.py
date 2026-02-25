@@ -3,7 +3,6 @@ Input validation and security checking utilities.
 Implements defense-in-depth security controls.
 """
 
-import re
 from pathlib import Path
 from typing import List, Optional
 from urllib.parse import urlparse
@@ -40,7 +39,9 @@ class SecurityValidator:
     MAX_FILE_SIZE_MB = 10
 
     @classmethod
-    def validate_git_url(cls, url: str, allowed_domains: Optional[List[str]] = None) -> str:
+    def validate_git_url(
+        cls, url: str, allowed_domains: Optional[List[str]] = None
+    ) -> str:
         """
         Validate and sanitize a git repository URL.
 
@@ -82,7 +83,9 @@ class SecurityValidator:
                     "Command Injection Attempt",
                     f"Shell metacharacter '{char}' found in URL: {url}",
                 )
-                raise CommandInjectionError(f"Suspicious character '{char}' found in URL")
+                raise CommandInjectionError(
+                    f"Suspicious character '{char}' found in URL"
+                )
 
         logger.debug(f"Validated git URL: {parsed.netloc}{parsed.path}")
         return url
@@ -107,7 +110,9 @@ class SecurityValidator:
             base_resolved = base_dir.resolve()
             raw_target = Path(path)
             target_resolved = (
-                raw_target.resolve() if raw_target.is_absolute() else (base_dir / raw_target).resolve()
+                raw_target.resolve()
+                if raw_target.is_absolute()
+                else (base_dir / raw_target).resolve()
             )
 
             # Check if target is within base
@@ -130,7 +135,9 @@ class SecurityValidator:
             raise ValidationError(f"Invalid file path: {e}")
 
     @classmethod
-    def validate_file_size(cls, file_path: Path, max_size_mb: Optional[int] = None) -> int:
+    def validate_file_size(
+        cls, file_path: Path, max_size_mb: Optional[int] = None
+    ) -> int:
         """
         Validate file size against limits.
 
@@ -160,7 +167,9 @@ class SecurityValidator:
         return size
 
     @classmethod
-    def validate_directory_size(cls, dir_path: Path, max_size_mb: Optional[int] = None) -> int:
+    def validate_directory_size(
+        cls, dir_path: Path, max_size_mb: Optional[int] = None
+    ) -> int:
         """
         Validate total directory size against limits.
 
@@ -203,7 +212,9 @@ class SecurityValidator:
         """
         for char in cls.SHELL_METACHARACTERS:
             if char in arg:
-                raise CommandInjectionError(f"Dangerous character '{char}' in argument: {arg}")
+                raise CommandInjectionError(
+                    f"Dangerous character '{char}' in argument: {arg}"
+                )
 
         return arg
 
@@ -231,7 +242,9 @@ class DataValidator:
             raise ValidationError(f"Score must be an integer, got {type(score)}")
 
         if not min_score <= score <= max_score:
-            raise ValidationError(f"Score {score} not in valid range [{min_score}, {max_score}]")
+            raise ValidationError(
+                f"Score {score} not in valid range [{min_score}, {max_score}]"
+            )
 
         return score
 
@@ -253,7 +266,9 @@ class DataValidator:
             raise ValidationError(f"Confidence must be numeric, got {type(confidence)}")
 
         if not 0.0 <= confidence <= 1.0:
-            raise ValidationError(f"Confidence {confidence} not in valid range [0.0, 1.0]")
+            raise ValidationError(
+                f"Confidence {confidence} not in valid range [0.0, 1.0]"
+            )
 
         return float(confidence)
 
@@ -273,6 +288,8 @@ class DataValidator:
             ValidationError: If criterion ID is invalid
         """
         if criterion_id not in valid_ids:
-            raise ValidationError(f"Unknown criterion ID: {criterion_id}. Valid IDs: {valid_ids}")
+            raise ValidationError(
+                f"Unknown criterion ID: {criterion_id}. Valid IDs: {valid_ids}"
+            )
 
         return criterion_id

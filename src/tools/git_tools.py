@@ -4,10 +4,9 @@ All operations are sandboxed and validated for security.
 """
 
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 from ..core.state import Evidence
-from ..utils.exceptions import CloneError, RepositoryError
 from ..utils.logger import get_logger
 from ..utils.validators import SecurityValidator
 from .security import RepositorySandbox
@@ -24,23 +23,31 @@ class GitAnalyzer:
     def __init__(self):
         self.sandbox = RepositorySandbox()
 
-    def analyze_repository(self, repo_url: str) -> Dict[str, Evidence]:
+    def analyze_repository(
+        self,
+        repo_url: str,
+        repo_path: Optional[Path] = None,
+    ) -> Dict[str, Evidence]:
         """
         Perform comprehensive analysis of a git repository.
 
         Args:
             repo_url: URL of the repository to analyze
+            repo_path: Optional path to an already-cloned repository
 
         Returns:
             Dictionary mapping evidence keys to Evidence objects
         """
         logger.info(f"Starting repository analysis: {repo_url}")
-        evidences: Dict[str, Evidence] = {}
         # URL validation is a security gate; propagate violations to callers.
         SecurityValidator.validate_git_url(
             repo_url, allowed_domains=self.sandbox.config.get_allowed_domains()
         )
 
+        if repo_path is not None:
+            return self._analyze_cloned_repository(repo_url, repo_path)
+
+        evidences: Dict[str, Evidence] = {}
         with self.sandbox.clone_repository(repo_url) as (success, repo_path, error):
             if not success:
                 logger.error(f"Failed to clone repository: {error}")
@@ -53,23 +60,27 @@ class GitAnalyzer:
                 )
                 return evidences
 
-            # Repository cloned successfully
-            evidences["clone_status"] = Evidence(
+            evidences.update(self._analyze_cloned_repository(repo_url, repo_path))
+
+        return evidences
+
+    def _analyze_cloned_repository(
+        self, repo_url: str, repo_path: Path
+    ) -> Dict[str, Evidence]:
+        """
+        Analyze repository evidence from an already-cloned working tree.
+        """
+        evidences: Dict[str, Evidence] = {
+            "clone_status": Evidence(
                 found=True,
                 content="Repository cloned successfully",
                 location=repo_url,
                 confidence=1.0,
                 detective_name="GitAnalyzer",
             )
-
-            # Analyze commit history
-            history_evidence = self._analyze_commit_history(repo_path)
-            evidences.update(history_evidence)
-
-            # Analyze file structure
-            structure_evidence = self._analyze_file_structure(repo_path)
-            evidences.update(structure_evidence)
-
+        }
+        evidences.update(self._analyze_commit_history(repo_path))
+        evidences.update(self._analyze_file_structure(repo_path))
         return evidences
 
     def _analyze_commit_history(self, repo_path: Path) -> Dict[str, Evidence]:
@@ -106,7 +117,9 @@ class GitAnalyzer:
 
         commit_summary = f"Found {num_commits} commits. "
         if is_atomic:
-            commit_summary += "Development appears atomic with step-by-step progression."
+            commit_summary += (
+                "Development appears atomic with step-by-step progression."
+            )
         else:
             commit_summary += "Development appears monolithic (few commits)."
 
@@ -177,7 +190,11 @@ class GitAnalyzer:
 
         evidences["configuration_files"] = Evidence(
             found=len(found_configs) > 0,
-            content=f"Found config files: {', '.join(found_configs)}" if found_configs else None,
+            content=(
+                f"Found config files: {', '.join(found_configs)}"
+                if found_configs
+                else None
+            ),
             location=str(repo_path),
             confidence=0.85 if found_configs else 0.3,
             detective_name="GitAnalyzer",
@@ -189,7 +206,9 @@ class GitAnalyzer:
 
         evidences["documentation"] = Evidence(
             found=len(found_docs) > 0,
-            content=f"Found documentation: {', '.join(found_docs)}" if found_docs else None,
+            content=(
+                f"Found documentation: {', '.join(found_docs)}" if found_docs else None
+            ),
             location=str(repo_path),
             confidence=0.8 if found_docs else 0.3,
             detective_name="GitAnalyzer",

@@ -76,7 +76,9 @@ def _resolve_local_pdf_path(pdf_input: str) -> Path:
 
         # Filename-only fallback: search once inside repository tree.
         if candidate.parent == Path("."):
-            matches = [p.resolve() for p in Path.cwd().rglob(candidate.name) if p.is_file()]
+            matches = [
+                p.resolve() for p in Path.cwd().rglob(candidate.name) if p.is_file()
+            ]
             if len(matches) == 1:
                 return matches[0]
             if len(matches) > 1:
@@ -147,7 +149,9 @@ def _resolve_pdf_input(
     return _resolve_local_pdf_path(cleaned)
 
 
-def _resolve_source_mode(local_pdf: bool, remote_pdf: bool) -> Literal["auto", "local", "remote"]:
+def _resolve_source_mode(
+    local_pdf: bool, remote_pdf: bool
+) -> Literal["auto", "local", "remote"]:
     """Resolve mutually exclusive local/remote CLI flags."""
     if local_pdf and remote_pdf:
         raise typer.BadParameter("Use either --local/-l or --remote/-r, not both.")
@@ -179,7 +183,9 @@ def _run_audit(
 
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
-    resolved_pdf_path = _resolve_pdf_input(pdf_path, output_path, source_mode=pdf_source_mode)
+    resolved_pdf_path = _resolve_pdf_input(
+        pdf_path, output_path, source_mode=pdf_source_mode
+    )
     logger.info(f"Resolved PDF path: {resolved_pdf_path}")
 
     initial_state = {
@@ -228,7 +234,9 @@ def _run_audit(
         percentage = (total / max_score * 100) if max_score > 0 else 0
 
         color = "green" if percentage >= 80 else "yellow" if percentage >= 60 else "red"
-        console.print(f"\n[{color}]Total: {total}/{max_score} ({percentage:.1f}%)[/{color}]")
+        console.print(
+            f"\n[{color}]Total: {total}/{max_score} ({percentage:.1f}%)[/{color}]"
+        )
 
     console.print("")
 

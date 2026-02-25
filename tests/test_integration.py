@@ -6,22 +6,30 @@ import pytest
 from unittest.mock import patch, Mock
 
 from src.core.graph import create_auditor_graph
-from src.core.state import RubricConfig, Evidence
+from src.core.state import Evidence, JudicialOpinion
+
+
+def _reset_graph_config(monkeypatch, enable_vision: bool) -> None:
+    monkeypatch.setenv("ENABLE_VISION_INSPECTOR", "true" if enable_vision else "false")
+    import src.core.config as config_module
+
+    config_module._config = None
 
 
 class TestGraphIntegration:
     """Integration tests for the full LangGraph."""
 
-    def test_graph_creation(self):
+    def test_graph_creation(self, monkeypatch):
         """Test that graph compiles successfully."""
+        _reset_graph_config(monkeypatch, enable_vision=False)
         graph = create_auditor_graph()
         assert graph is not None
 
-    def test_graph_nodes(self):
-        """Test that all required nodes are present."""
+    def test_graph_nodes_without_optional_vision(self, monkeypatch):
+        """Test default graph topology with optional vision node disabled."""
+        _reset_graph_config(monkeypatch, enable_vision=False)
         graph = create_auditor_graph()
 
-        # Check key nodes exist
         expected_nodes = [
             "initialize",
             "repo_investigator",
@@ -36,61 +44,101 @@ class TestGraphIntegration:
 
         for node in expected_nodes:
             assert node in graph.nodes, f"Missing node: {node}"
+        assert "vision_inspector" not in graph.nodes
+
+    def test_graph_nodes_with_optional_vision(self, monkeypatch):
+        """Test graph topology when optional vision node is enabled."""
+        _reset_graph_config(monkeypatch, enable_vision=True)
+        graph = create_auditor_graph()
+        assert "vision_inspector" in graph.nodes
 
     @pytest.mark.integration
     @pytest.mark.slow
-    def test_full_execution_mocked(self, sample_agent_state, test_env):
+    def test_full_execution_mocked(self, sample_agent_state, test_env, monkeypatch):
         """Test full graph execution with mocked components."""
-        graph = create_auditor_graph()
+        _reset_graph_config(monkeypatch, enable_vision=False)
 
-        # Mock the expensive operations
-        with patch("src.agents.detectives.repo_investigator.GitAnalyzer") as MockGit, \
-             patch("src.agents.detectives.doc_analyst.PDFAnalyzer") as MockPDF, \
-             patch("src.agents.judges.base_judge.ChatOpenAI") as MockLLM:
-
-            # Setup mocks
-            MockGit.return_value.analyze_repository.return_value = {
-                "test": Evidence(
-                    found=True,
-                    content="Test",
-                    location="test.py",
-                    confidence=0.9,
-                    detective_name="RepoInvestigator",
-                )
+        repo_node_output = {
+            "evidences": {
+                "RepoInvestigator": [
+                    Evidence(
+                        found=True,
+                        content="Repository cloned and analyzed",
+                        location="src/core/graph.py",
+                        confidence=0.95,
+                        detective_name="RepoInvestigator",
+                    )
+                ]
             }
-
-            MockPDF.return_value.analyze_pdf.return_value = {
-                "pdf": Evidence(
-                    found=True,
-                    content="PDF content",
-                    location="test.pdf",
-                    confidence=0.9,
-                    detective_name="DocAnalyst",
-                )
+        }
+        doc_node_output = {
+            "evidences": {
+                "DocAnalyst": [
+                    Evidence(
+                        found=True,
+                        content="PDF parsed successfully",
+                        location="report.pdf",
+                        confidence=0.9,
+                        detective_name="DocAnalyst",
+                    )
+                ]
             }
+        }
+        prosecutor_output = {
+            "opinions": [
+                JudicialOpinion(
+                    judge="Prosecutor",
+                    criterion_id="test_criterion",
+                    score=3,
+                    argument="Critical review identified manageable issues with acceptable controls.",
+                    cited_evidence=["src/core/graph.py"],
+                )
+            ]
+        }
+        defense_output = {
+            "opinions": [
+                JudicialOpinion(
+                    judge="Defense",
+                    criterion_id="test_criterion",
+                    score=4,
+                    argument="Positive evidence suggests the implementation is generally reliable.",
+                    cited_evidence=["report.pdf"],
+                )
+            ]
+        }
+        tech_lead_output = {
+            "opinions": [
+                JudicialOpinion(
+                    judge="TechLead",
+                    criterion_id="test_criterion",
+                    score=4,
+                    argument="System design appears maintainable with clear operational safeguards.",
+                    cited_evidence=["src/core/graph.py"],
+                )
+            ]
+        }
+        chief_output = {
+            "final_scores": {"test_criterion": 4},
+            "synthesis_summary": "Deterministic mocked synthesis completed.",
+            "final_report": "# Mocked Report\n\nAll checks passed.",
+        }
 
-            # Mock LLM responses
-            mock_llm_instance = Mock()
-            mock_llm_instance.invoke.return_value = Mock(
-                criterion_id="test_criterion",
-                score=3,
-                argument="This is a test opinion with sufficient length for validation.",
-                cited_evidence=["evidence1"],
-            )
-            MockLLM.return_value.with_structured_output.return_value = mock_llm_instance
+        with (
+            patch(
+                "src.core.graph.repo_investigator_node", return_value=repo_node_output
+            ),
+            patch("src.core.graph.doc_analyst_node", return_value=doc_node_output),
+            patch("src.core.graph.prosecutor_node", return_value=prosecutor_output),
+            patch("src.core.graph.defense_node", return_value=defense_output),
+            patch("src.core.graph.tech_lead_node", return_value=tech_lead_output),
+            patch("src.core.graph.chief_justice_node", return_value=chief_output),
+        ):
+            graph = create_auditor_graph()
+            result = graph.invoke(sample_agent_state)
 
-            try:
-                result = graph.invoke(sample_agent_state)
-
-                # Verify structure
-                assert "final_scores" in result
-                assert "final_report" in result
-                assert "synthesis_summary" in result
-
-            except Exception as e:
-                # Graph execution may fail in test environment
-                # This is acceptable for integration tests
-                pytest.skip(f"Integration test skipped due to: {e}")
+        assert result["final_scores"]["test_criterion"] == 4
+        assert "Mocked Report" in result["final_report"]
+        assert "synthesis_summary" in result
 
 
 class TestEndToEndFlow:
@@ -132,8 +180,9 @@ class TestEndToEndFlow:
 
     @pytest.mark.integration
     @pytest.mark.slow
-    def test_parallel_execution(self):
+    def test_parallel_execution(self, monkeypatch):
         """Test that parallel nodes execute correctly."""
+        _reset_graph_config(monkeypatch, enable_vision=False)
         graph = create_auditor_graph()
 
         # The graph should have parallel branches
@@ -145,8 +194,9 @@ class TestErrorPropagation:
     """Test error handling throughout the system."""
 
     @pytest.mark.integration
-    def test_detective_error_handling(self, sample_agent_state):
+    def test_detective_error_handling(self, sample_agent_state, monkeypatch):
         """Test error handling in detective layer."""
+        _reset_graph_config(monkeypatch, enable_vision=False)
         graph = create_auditor_graph()
 
         # Use invalid repo URL
@@ -154,7 +204,7 @@ class TestErrorPropagation:
 
         with pytest.raises(Exception):
             # Should raise an error due to invalid URL
-            result = graph.invoke(sample_agent_state)
+            graph.invoke(sample_agent_state)
 
     @pytest.mark.integration
     def test_missing_evidence_handling(self, sample_agent_state):
@@ -179,21 +229,29 @@ class TestStateReduction:
         """Test that evidences dict merges correctly."""
         from operator import ior
 
-        state1 = {"Detective1": [Evidence(
-            found=True,
-            content="A",
-            location="a.py",
-            confidence=0.9,
-            detective_name="Detective1",
-        )]}
+        state1 = {
+            "Detective1": [
+                Evidence(
+                    found=True,
+                    content="A",
+                    location="a.py",
+                    confidence=0.9,
+                    detective_name="Detective1",
+                )
+            ]
+        }
 
-        state2 = {"Detective2": [Evidence(
-            found=True,
-            content="B",
-            location="b.py",
-            confidence=0.9,
-            detective_name="Detective2",
-        )]}
+        state2 = {
+            "Detective2": [
+                Evidence(
+                    found=True,
+                    content="B",
+                    location="b.py",
+                    confidence=0.9,
+                    detective_name="Detective2",
+                )
+            ]
+        }
 
         merged = ior(state1, state2)
 

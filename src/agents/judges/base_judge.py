@@ -84,7 +84,9 @@ class BaseJudge(ABC):
         self.raw_llm = self._build_llm()
         self.llm = self._configure_structured_output(self.raw_llm)
 
-        logger.debug(f"Initialized {judge_name} with model {self.config.default_llm_model}")
+        logger.debug(
+            f"Initialized {judge_name} with model {self.config.default_llm_model}"
+        )
 
     @abstractmethod
     def get_system_prompt(self) -> str:
@@ -112,9 +114,7 @@ class BaseJudge(ABC):
             JudicialOpinion object
         """
         criterion_data = (
-            criterion.model_dump()
-            if hasattr(criterion, "model_dump")
-            else criterion
+            criterion.model_dump() if hasattr(criterion, "model_dump") else criterion
         )
         criterion_id = criterion_data["id"]
         logger.info(f"{self.judge_name} evaluating criterion: {criterion_id}")
@@ -180,7 +180,9 @@ Keep your argument concise (target 100-220 characters).
             return opinion
 
         except Exception as e:
-            logger.error(f"{self.judge_name} failed to render opinion: {e}", exc_info=True)
+            logger.error(
+                f"{self.judge_name} failed to render opinion: {e}", exc_info=True
+            )
 
             # Return fallback opinion
             return JudicialOpinion(
@@ -342,7 +344,9 @@ Keep your argument concise (target 100-220 characters).
                 )
                 time.sleep(wait_seconds)
 
-    def _coerce_structured_response(self, response, criterion_id: str) -> StructuredOpinion:
+    def _coerce_structured_response(
+        self, response, criterion_id: str
+    ) -> StructuredOpinion:
         """Convert model response variants into StructuredOpinion."""
         expected_keys = {"criterion_id", "score", "argument", "cited_evidence"}
 
@@ -398,55 +402,6 @@ Keep your argument concise (target 100-220 characters).
                 candidate = match.group(0)
 
         return json.loads(candidate)
-
-    def _format_evidence_for_context(
-        self,
-        evidences: Dict[str, List[Evidence]],
-        criterion: Dict,
-    ) -> str:
-        """
-        Format evidence into a readable context string.
-
-        Args:
-            evidences: All collected evidence
-            criterion: The criterion being evaluated
-
-        Returns:
-            Formatted evidence string
-        """
-        # Filter evidence by target artifact
-        target_artifact = criterion.get("target_artifact")
-        detective_targets = {
-            "RepoInvestigator": "github_repo",
-            "DocAnalyst": "pdf_report",
-            "VisionInspector": "pdf_report",
-            "CrossReference": "pdf_report",
-        }
-
-        context_parts = []
-
-        for detective_name, evidence_list in evidences.items():
-            if target_artifact and detective_name in detective_targets:
-                if detective_targets[detective_name] != target_artifact:
-                    continue
-
-            context_parts.append(f"\n## {detective_name} Evidence:\n")
-
-            for evidence in evidence_list:
-                status = "✓ FOUND" if evidence.found else "✗ NOT FOUND"
-                context_parts.append(f"\n{status} [{evidence.location}]")
-                context_parts.append(f"Confidence: {evidence.confidence:.2f}")
-
-                if evidence.content:
-                    # Truncate long content
-                    content = evidence.content[:500]
-                    if len(evidence.content) > 500:
-                        content += "..."
-                    context_parts.append(f"Content: {content}")
-
-                context_parts.append("")  # Blank line
-
-        return "\n".join(context_parts)
 
     # Override with token-budget-aware formatting for low-TPM providers.
     def _format_evidence_for_context(
@@ -565,7 +520,9 @@ Keep your argument concise (target 100-220 characters).
             cited_evidence=filtered_citations,
         )
 
-    def _collect_allowed_locations(self, evidences: Dict[str, List[Evidence]]) -> List[str]:
+    def _collect_allowed_locations(
+        self, evidences: Dict[str, List[Evidence]]
+    ) -> List[str]:
         """Collect normalized evidence locations usable for citation checks."""
         locations: set[str] = set()
         for evidence_list in evidences.values():
@@ -573,7 +530,9 @@ Keep your argument concise (target 100-220 characters).
                 location = self._normalize_location(evidence.location)
                 if location:
                     locations.add(location)
-                compact_location = self._normalize_location(self._compact_location(evidence.location))
+                compact_location = self._normalize_location(
+                    self._compact_location(evidence.location)
+                )
                 if compact_location:
                     locations.add(compact_location)
         return sorted(locations)
@@ -582,7 +541,9 @@ Keep your argument concise (target 100-220 characters).
         """Normalize a location string for fuzzy evidence matching."""
         return str(value or "").strip().lower().replace("\\", "/")
 
-    def _is_citation_verified(self, citation: str, allowed_locations: List[str]) -> bool:
+    def _is_citation_verified(
+        self, citation: str, allowed_locations: List[str]
+    ) -> bool:
         """Check whether a citation overlaps with known evidence locations."""
         normalized_citation = self._normalize_location(citation)
         if not normalized_citation:
@@ -590,7 +551,10 @@ Keep your argument concise (target 100-220 characters).
 
         if normalized_citation.endswith("/"):
             return False
-        if "/" in normalized_citation and "." not in normalized_citation.rsplit("/", 1)[-1]:
+        if (
+            "/" in normalized_citation
+            and "." not in normalized_citation.rsplit("/", 1)[-1]
+        ):
             if not normalized_citation.startswith("http"):
                 return False
 
@@ -605,12 +569,18 @@ Keep your argument concise (target 100-220 characters).
         for evidence_list in evidences.values():
             ranked.extend(evidence_list)
         ranked = sorted(ranked, key=lambda ev: ev.confidence, reverse=True)
-        fallback = [self._compact_location(ev.location) for ev in ranked[:3] if ev.location]
+        fallback = [
+            self._compact_location(ev.location) for ev in ranked[:3] if ev.location
+        ]
         return fallback or ["insufficient_verified_evidence"]
 
-    def _find_unverified_paths(self, argument: str, allowed_locations: List[str]) -> List[str]:
+    def _find_unverified_paths(
+        self, argument: str, allowed_locations: List[str]
+    ) -> List[str]:
         """Extract path-like references that are not present in collected evidence."""
-        path_pattern = re.compile(r"\b(?:src|lib|app|tools|agents)/[\w./-]+\b", re.IGNORECASE)
+        path_pattern = re.compile(
+            r"\b(?:src|lib|app|tools|agents)/[\w./-]+\b", re.IGNORECASE
+        )
         unverified: List[str] = []
         for match in path_pattern.finditer(argument):
             referenced_path = match.group(0)
@@ -645,7 +615,9 @@ Keep your argument concise (target 100-220 characters).
         for sentence in sentences:
             if not sentence:
                 continue
-            if self._is_high_risk_claim(sentence) and not self._sentence_has_evidence_anchor(
+            if self._is_high_risk_claim(
+                sentence
+            ) and not self._sentence_has_evidence_anchor(
                 sentence, evidence_tokens, allowed_locations
             ):
                 removed_count += 1
@@ -664,9 +636,14 @@ Keep your argument concise (target 100-220 characters).
             r"\b\d+\s*(?:times|x)\b",
             r"\b(?:always|never|purely|only|all|none|no evidence)\b",
         )
-        return any(re.search(pattern, sentence, re.IGNORECASE) for pattern in high_risk_patterns)
+        return any(
+            re.search(pattern, sentence, re.IGNORECASE)
+            for pattern in high_risk_patterns
+        )
 
-    def _collect_evidence_tokens(self, evidences: Dict[str, List[Evidence]]) -> set[str]:
+    def _collect_evidence_tokens(
+        self, evidences: Dict[str, List[Evidence]]
+    ) -> set[str]:
         """Collect compact token set from evidence for lightweight claim anchoring."""
         tokens: set[str] = set()
         for evidence_list in evidences.values():
@@ -688,6 +665,8 @@ Keep your argument concise (target 100-220 characters).
         if any(location in normalized_sentence for location in allowed_locations):
             return True
 
-        sentence_tokens = set(re.findall(r"[A-Za-z][A-Za-z0-9_./-]{3,}", normalized_sentence))
+        sentence_tokens = set(
+            re.findall(r"[A-Za-z][A-Za-z0-9_./-]{3,}", normalized_sentence)
+        )
         overlap = sentence_tokens & evidence_tokens
         return len(overlap) >= 2

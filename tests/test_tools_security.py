@@ -3,7 +3,6 @@ Tests for sandboxed execution tools.
 """
 
 import pytest
-from pathlib import Path
 
 from src.tools.security import SandboxedExecutor, RepositorySandbox
 from src.utils.exceptions import CommandInjectionError, TimeoutError
@@ -117,7 +116,11 @@ class TestRepositorySandbox:
         """Test rejection of invalid repository URLs."""
         sandbox = RepositorySandbox()
 
-        with sandbox.clone_repository("https://evil.com/repo") as (success, repo_path, error):
+        with sandbox.clone_repository("https://evil.com/repo") as (
+            success,
+            repo_path,
+            error,
+        ):
             assert success is False
             assert repo_path is None
             assert "not in allowed list" in error

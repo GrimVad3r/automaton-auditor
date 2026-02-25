@@ -16,6 +16,7 @@ from ..agents.detectives import (
 )
 from ..agents.judges import defense_node, prosecutor_node, tech_lead_node
 from ..agents.justice import chief_justice_node
+from ..core.config import get_config
 from ..core.state import AgentState, Evidence
 from ..tools import PDFAnalyzer
 from ..utils.logger import get_logger
@@ -65,9 +66,16 @@ def create_auditor_graph() -> StateGraph:
     builder.add_node("initialize", initialize_node)
 
     # Layer 1: Detective nodes (parallel)
+    config = get_config(require_llm_keys=False)
     builder.add_node("repo_investigator", repo_investigator_node)
     builder.add_node("doc_analyst", doc_analyst_node)
-    builder.add_node("vision_inspector", vision_inspector_node)
+    detective_nodes = ["repo_investigator", "doc_analyst"]
+    if config.enable_vision_inspector:
+        builder.add_node("vision_inspector", vision_inspector_node)
+        detective_nodes.append("vision_inspector")
+        logger.info("VisionInspector node enabled")
+    else:
+        logger.info("VisionInspector node disabled")
 
     # Evidence aggregation node
     builder.add_node("aggregate_evidence", aggregate_evidence_node)
@@ -87,14 +95,12 @@ def create_auditor_graph() -> StateGraph:
     builder.set_entry_point("initialize")
 
     # Fan-out: Initialize to Detectives (parallel)
-    builder.add_edge("initialize", "repo_investigator")
-    builder.add_edge("initialize", "doc_analyst")
-    builder.add_edge("initialize", "vision_inspector")
+    for detective_node in detective_nodes:
+        builder.add_edge("initialize", detective_node)
 
     # Fan-in: Detectives to Aggregation
-    builder.add_edge("repo_investigator", "aggregate_evidence")
-    builder.add_edge("doc_analyst", "aggregate_evidence")
-    builder.add_edge("vision_inspector", "aggregate_evidence")
+    for detective_node in detective_nodes:
+        builder.add_edge(detective_node, "aggregate_evidence")
 
     # Fan-out: Aggregation to Judges (parallel)
     builder.add_edge("aggregate_evidence", "prosecutor")
@@ -158,7 +164,9 @@ def aggregate_evidence_node(state: AgentState) -> Dict:
 
     # Log summary
     total_evidence = sum(len(ev_list) for ev_list in evidences.values())
-    logger.info(f"Aggregated {total_evidence} pieces of evidence from {len(evidences)} detectives")
+    logger.info(
+        f"Aggregated {total_evidence} pieces of evidence from {len(evidences)} detectives"
+    )
 
     for detective, ev_list in evidences.items():
         logger.info(f"  - {detective}: {len(ev_list)} evidence items")
@@ -184,7 +192,9 @@ def aggregate_evidence_node(state: AgentState) -> Dict:
     return updates
 
 
-def _cross_reference_pdf_claims(state: AgentState, evidences: Dict[str, list]) -> list[Evidence]:
+def _cross_reference_pdf_claims(
+    state: AgentState, evidences: Dict[str, list]
+) -> list[Evidence]:
     """
     Cross-reference document claims against repository evidence after fan-in.
     """
@@ -203,8 +213,10 @@ def _cross_reference_pdf_claims(state: AgentState, evidences: Dict[str, list]) -
 
         verified_locations = []
         for evidence in repo_evidence:
-            if evidence.found and evidence.location and (
-                "/" in evidence.location or "\\" in evidence.location
+            if (
+                evidence.found
+                and evidence.location
+                and ("/" in evidence.location or "\\" in evidence.location)
             ):
                 verified_locations.append(evidence.location)
 

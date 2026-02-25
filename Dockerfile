@@ -1,7 +1,7 @@
 # Multi-stage Dockerfile for production deployment
 
 # Stage 1: Builder
-FROM python:3.11-slim as builder
+FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
@@ -12,12 +12,15 @@ RUN apt-get update && \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy dependency files
-COPY pyproject.toml ./
-
-# Install Python dependencies
+# Install uv (pinned)
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -e .
+    pip install --no-cache-dir uv==0.10.0
+
+# Copy lock and metadata first for deterministic dependency layer caching
+COPY pyproject.toml uv.lock README.md ./
+
+# Install only locked runtime dependencies
+RUN uv sync --frozen --no-dev --no-install-project
 
 # Stage 2: Runtime
 FROM python:3.11-slim
@@ -35,12 +38,14 @@ RUN useradd -m -u 1000 auditor && \
     mkdir -p /app/logs /app/audit && \
     chown -R auditor:auditor /app
 
-# Copy Python packages from builder
-COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-COPY --from=builder /usr/local/bin /usr/local/bin
+# Copy locked virtual environment from builder
+COPY --from=builder /app/.venv /app/.venv
 
 # Copy application code
 COPY --chown=auditor:auditor . .
+
+# Ensure runtime uses the locked environment
+ENV PATH="/app/.venv/bin:$PATH"
 
 # Switch to non-root user
 USER auditor

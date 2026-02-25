@@ -22,6 +22,7 @@ def create_auditor_graph():
 
     return _create_auditor_graph()
 
+
 __all__ = [
     "AgentState",
     "Config",

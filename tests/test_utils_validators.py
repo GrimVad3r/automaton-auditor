@@ -3,7 +3,6 @@ Tests for security validators.
 """
 
 import pytest
-from pathlib import Path
 
 from src.utils.validators import SecurityValidator, DataValidator
 from src.utils.exceptions import (
@@ -117,7 +116,9 @@ class TestSecurityValidator:
     def test_validate_directory_size_exceeds_limit(self, mock_git_repo):
         """Test rejection of oversized directories."""
         with pytest.raises(ResourceLimitError, match="exceeds limit"):
-            SecurityValidator.validate_directory_size(mock_git_repo, max_size_mb=0.000001)
+            SecurityValidator.validate_directory_size(
+                mock_git_repo, max_size_mb=0.000001
+            )
 
     @pytest.mark.security
     def test_sanitize_command_arg_safe(self):
@@ -200,7 +201,11 @@ class TestDataValidator:
 
     def test_validate_criterion_id_valid(self):
         """Test validation of valid criterion IDs."""
-        valid_ids = ["forensic_accuracy_code", "judicial_nuance", "langgraph_architecture"]
+        valid_ids = [
+            "forensic_accuracy_code",
+            "judicial_nuance",
+            "langgraph_architecture",
+        ]
 
         result = DataValidator.validate_criterion_id(valid_ids[0], valid_ids)
         assert result == valid_ids[0]

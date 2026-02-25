@@ -20,8 +20,12 @@ class Evidence(BaseModel):
     content: Optional[str] = Field(default=None, description="Relevant content snippet")
     location: str = Field(description="File path, commit hash, or document section")
     confidence: float = Field(ge=0.0, le=1.0, description="Confidence score [0.0-1.0]")
-    detective_name: str = Field(description="Name of the detective agent that found this")
-    timestamp: Optional[str] = Field(default=None, description="When evidence was collected")
+    detective_name: str = Field(
+        description="Name of the detective agent that found this"
+    )
+    timestamp: Optional[str] = Field(
+        default=None, description="When evidence was collected"
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -52,7 +56,9 @@ class JudicialOpinion(BaseModel):
     cited_evidence: List[str] = Field(
         default_factory=list, description="References to evidence objects"
     )
-    timestamp: Optional[str] = Field(default=None, description="When opinion was rendered")
+    timestamp: Optional[str] = Field(
+        default=None, description="When opinion was rendered"
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -130,7 +136,9 @@ class NodeOutput(BaseModel):
     success: bool = Field(description="Whether the node executed successfully")
     data: Optional[Dict] = Field(default=None, description="Output data")
     error: Optional[str] = Field(default=None, description="Error message if failed")
-    duration: Optional[float] = Field(default=None, description="Execution time in seconds")
+    duration: Optional[float] = Field(
+        default=None, description="Execution time in seconds"
+    )
 
 
 class DetectiveOutput(BaseModel):

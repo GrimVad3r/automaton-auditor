@@ -6,7 +6,7 @@ import pytest
 from pathlib import Path
 
 from src.tools.ast_tools import ASTAnalyzer
-from src.utils.exceptions import ASTParsingError, PathTraversalError
+from src.utils.exceptions import PathTraversalError
 
 
 class TestASTAnalyzer:

@@ -33,45 +33,43 @@ print_info() {
 # Test modes
 run_all_tests() {
     print_header "Running All Tests"
-    pytest tests/ -v
+    uv run pytest tests/ -v
 }
 
 run_unit_tests() {
     print_header "Running Unit Tests Only"
-    pytest tests/ -v -m "not slow and not integration and not requires_api"
+    uv run pytest tests/ -v -m "not slow and not integration and not requires_api"
 }
 
 run_integration_tests() {
     print_header "Running Integration Tests"
-    pytest tests/ -v -m "integration"
+    uv run pytest tests/ -v -m "integration"
 }
 
 run_security_tests() {
     print_header "Running Security Tests"
-    pytest tests/ -v -m "security"
+    uv run pytest tests/ -v -m "security"
 }
 
 run_fast_tests() {
     print_header "Running Fast Tests"
-    pytest tests/ -v -m "not slow"
+    uv run pytest tests/ -v -m "not slow"
 }
 
 run_with_coverage() {
     print_header "Running Tests with Coverage Report"
-    pytest tests/ -v --cov=src --cov-report=html --cov-report=term-missing
+    uv run pytest tests/ -v --cov=src --cov-report=html --cov-report=term-missing
     print_success "Coverage report generated at htmlcov/index.html"
 }
 
 run_specific_file() {
     print_header "Running Tests in $1"
-    pytest "$1" -v
+    uv run pytest "$1" -v
 }
 
 run_parallel() {
     print_header "Running Tests in Parallel"
-    print_info "Installing pytest-xdist..."
-    pip install pytest-xdist -q
-    pytest tests/ -v -n auto
+    uv run pytest tests/ -v -n auto
 }
 
 show_help() {
@@ -103,10 +101,8 @@ EOF
 
 watch_mode() {
     print_header "Watch Mode"
-    print_info "Installing pytest-watch..."
-    pip install pytest-watch -q
     print_info "Watching for changes... Press Ctrl+C to stop"
-    ptw tests/ -- -v -m "not slow"
+    uv run ptw tests/ -- -v -m "not slow"
 }
 
 clean_artifacts() {
@@ -124,10 +120,10 @@ clean_artifacts() {
 
 # Main script
 main() {
-    # Check if pytest is installed
-    if ! command -v pytest &> /dev/null; then
-        print_error "pytest not found. Installing..."
-        pip install pytest pytest-cov
+    # Check if uv is installed
+    if ! command -v uv &> /dev/null; then
+        print_error "uv not found. Install it first: python -m pip install --upgrade uv"
+        exit 1
     fi
 
     # Parse command

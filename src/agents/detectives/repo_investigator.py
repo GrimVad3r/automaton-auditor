@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from typing import Dict, List
 
-from ...core.state import AgentState, DetectiveOutput, Evidence
+from ...core.state import AgentState, Evidence
 from ...tools import ASTAnalyzer, GitAnalyzer
 from ...utils.exceptions import NodeExecutionError
 from ...utils.logger import get_logger
@@ -44,34 +44,31 @@ class RepoInvestigator:
             # Collect evidence
             evidence_list: List[Evidence] = []
 
-            # Phase 1: Git-level forensics
-            logger.info("Phase 1: Analyzing git repository structure")
-            git_evidences = self.git_analyzer.analyze_repository(repo_url)
-            evidence_list.extend(git_evidences.values())
-
-            clone_status = git_evidences.get("clone_status")
-            if clone_status and not clone_status.found:
-                raise ValueError(f"Repository analysis failed for URL: {repo_url}")
-
-            for key, evidence in git_evidences.items():
-                logger.log_evidence_found(key, evidence.confidence)
-
-            # Phase 2: Code-level forensics
-            # We need to clone the repo again for AST analysis
-            # (In a real implementation, we'd reuse the cloned repo)
-            logger.info("Phase 2: Performing AST analysis on key files")
-
             with self.git_analyzer.sandbox.clone_repository(repo_url) as (
                 success,
                 repo_path,
                 error,
             ):
-                if success and repo_path:
-                    code_evidences = self._analyze_code_structure(repo_path)
-                    evidence_list.extend(code_evidences)
+                if not success or not repo_path:
+                    raise ValueError(
+                        f"Repository analysis failed for URL: {repo_url}. {error}"
+                    )
 
-                    for evidence in code_evidences:
-                        logger.log_evidence_found(evidence.location, evidence.confidence)
+                # Phase 1: Git-level forensics
+                logger.info("Phase 1: Analyzing git repository structure")
+                git_evidences = self.git_analyzer.analyze_repository(
+                    repo_url, repo_path=repo_path
+                )
+                evidence_list.extend(git_evidences.values())
+                for key, evidence in git_evidences.items():
+                    logger.log_evidence_found(key, evidence.confidence)
+
+                # Phase 2: Code-level forensics
+                logger.info("Phase 2: Performing AST analysis on key files")
+                code_evidences = self._analyze_code_structure(repo_path)
+                evidence_list.extend(code_evidences)
+                for evidence in code_evidences:
+                    logger.log_evidence_found(evidence.location, evidence.confidence)
 
             duration = time.time() - start_time
             logger.log_node_complete("RepoInvestigator", duration)
@@ -125,7 +122,9 @@ class RepoInvestigator:
 
                     # Specifically check for LangGraph definition
                     if "graph" in file_pattern.lower():
-                        graph_evidence = ast_analyzer.find_langgraph_definition(file_path)
+                        graph_evidence = ast_analyzer.find_langgraph_definition(
+                            file_path
+                        )
                         if graph_evidence:
                             evidences.append(graph_evidence)
 

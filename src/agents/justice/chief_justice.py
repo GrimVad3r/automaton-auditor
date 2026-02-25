@@ -34,7 +34,9 @@ class ChiefJustice:
         opinions = state.get("opinions", [])
         evidences = state.get("evidences", {})
         rubric = state["rubric"]
-        dimensions = rubric.dimensions if hasattr(rubric, "dimensions") else rubric["dimensions"]
+        dimensions = (
+            rubric.dimensions if hasattr(rubric, "dimensions") else rubric["dimensions"]
+        )
         synthesis_rules = (
             rubric.synthesis_rules
             if hasattr(rubric, "synthesis_rules")
@@ -51,7 +53,11 @@ class ChiefJustice:
         synthesis_notes = []
 
         for dimension in dimensions:
-            criterion = dimension.model_dump() if hasattr(dimension, "model_dump") else dimension
+            criterion = (
+                dimension.model_dump()
+                if hasattr(dimension, "model_dump")
+                else dimension
+            )
             criterion_id = criterion["id"]
             criterion_opinions = opinions_by_criterion.get(criterion_id, [])
             score, note = self._resolve_criterion(
@@ -118,7 +124,9 @@ class ChiefJustice:
             return 3, f"{criterion_id}: No opinions provided (defaulting to 3)"
 
         # Extract scores from each judge
-        prosecutor_score = next((o.score for o in opinions if o.judge == "Prosecutor"), 3)
+        prosecutor_score = next(
+            (o.score for o in opinions if o.judge == "Prosecutor"), 3
+        )
         defense_score = next((o.score for o in opinions if o.judge == "Defense"), 3)
         tech_lead_score = next((o.score for o in opinions if o.judge == "TechLead"), 3)
 
@@ -172,7 +180,11 @@ class ChiefJustice:
             # Moderate variance: weighted average with Tech Lead emphasis
             final_score = int(
                 round(
-                    (prosecutor_score * 0.25 + defense_score * 0.25 + tech_lead_score * 0.5)
+                    (
+                        prosecutor_score * 0.25
+                        + defense_score * 0.25
+                        + tech_lead_score * 0.5
+                    )
                 )
             )
             note = (
@@ -185,7 +197,9 @@ class ChiefJustice:
 
         return final_score, note
 
-    def _generate_summary(self, synthesis_notes: List[str], final_scores: Dict[str, int]) -> str:
+    def _generate_summary(
+        self, synthesis_notes: List[str], final_scores: Dict[str, int]
+    ) -> str:
         """Generate executive summary of the synthesis process."""
         total_score = sum(final_scores.values())
         max_score = len(final_scores) * 5

@@ -168,8 +168,8 @@ echo -e "\n✅ Verification complete!"
 
 ### Import Errors
 ```bash
-# Reinstall package in development mode
-pip install -e .
+# Reinstall locked dependencies
+uv sync --frozen --extra dev
 ```
 
 ### Missing Directories
@@ -191,4 +191,4 @@ All checks should show "✓ Pass". If any fail:
 1. Check error messages
 2. Verify Python version (3.11+)
 3. Ensure virtual environment is activated
-4. Reinstall dependencies: `pip install -e .`
+4. Reinstall dependencies: `uv sync --frozen --extra dev`
