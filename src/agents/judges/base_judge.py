@@ -563,7 +563,8 @@ Keep your argument concise (target 100-220 characters).
             return evidences
         allowed = {
             "github_repo": {"RepoInvestigator"},
-            "pdf_report": {"DocAnalyst", "VisionInspector", "CrossReference"},
+            # Allow RepoInvestigator when evaluating docs so judges can cross-check PDF claims against code
+            "pdf_report": {"DocAnalyst", "VisionInspector", "CrossReference", "RepoInvestigator"},
         }.get(target_artifact, set())
         return {k: v for k, v in evidences.items() if k in allowed}
 
