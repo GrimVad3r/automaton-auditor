@@ -5,7 +5,7 @@ Integration tests for full system functionality.
 import pytest
 from unittest.mock import patch, Mock
 
-from src.core.graph import create_auditor_graph
+from src.core.graph import create_auditor_graph, _cross_reference_pdf_claims
 from src.core.state import Evidence, JudicialOpinion
 
 
@@ -51,6 +51,68 @@ class TestGraphIntegration:
         _reset_graph_config(monkeypatch, enable_vision=True)
         graph = create_auditor_graph()
         assert "vision_inspector" in graph.nodes
+
+    def test_cross_reference_uses_repo_file_inventory(self, temp_dir):
+        """Cross-reference should include actual repo files, not only sparse evidence locations."""
+        repo_root = temp_dir / "repo"
+        target_file = repo_root / "src" / "agents" / "judges" / "prosecutor.py"
+        target_file.parent.mkdir(parents=True, exist_ok=True)
+        target_file.write_text("PROMPT = 'Trust No One'", encoding="utf-8")
+        graph_file = repo_root / "src" / "core" / "graph.py"
+        graph_file.parent.mkdir(parents=True, exist_ok=True)
+        graph_file.write_text("from langgraph.graph import StateGraph", encoding="utf-8")
+
+        pdf_file = temp_dir / "report.pdf"
+        pdf_file.write_text("placeholder", encoding="utf-8")
+
+        state = {"pdf_path": str(pdf_file)}
+        evidences = {
+            "RepoInvestigator": [
+                Evidence(
+                    found=True,
+                    content="Graph evidence",
+                    location=str(graph_file),
+                    confidence=0.9,
+                    detective_name="RepoInvestigator",
+                )
+            ]
+        }
+
+        captured = {}
+
+        def _fake_extract_text(self, _pdf_path):
+            return "References: src/agents/judges/prosecutor.py and src/core/graph.py"
+
+        def _fake_cross_reference(self, _text, verified_files):
+            captured["verified_files"] = verified_files
+            return {
+                "hallucinated_claims": Evidence(
+                    found=False,
+                    content="All file references verified",
+                    location="PDF Report",
+                    confidence=0.9,
+                    detective_name="PDFAnalyzer",
+                )
+            }
+
+        with (
+            patch("src.core.graph.PDFAnalyzer._extract_text", _fake_extract_text),
+            patch(
+                "src.core.graph.PDFAnalyzer.cross_reference_claims",
+                _fake_cross_reference,
+            ),
+        ):
+            result = _cross_reference_pdf_claims(state, evidences)
+
+        assert result
+        assert result[0].found is False
+        normalized_verified = {
+            str(path).replace("\\", "/") for path in captured["verified_files"]
+        }
+        assert any(
+            path.endswith("src/agents/judges/prosecutor.py")
+            for path in normalized_verified
+        )
 
     @pytest.mark.integration
     @pytest.mark.slow

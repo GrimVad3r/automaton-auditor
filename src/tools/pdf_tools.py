@@ -221,9 +221,10 @@ class PDFAnalyzer:
         """
         import re
 
-        # Pattern to match file paths
-        # Matches: src/file.py, ./src/file.py, /path/to/file.py
-        file_pattern = r"(?:src|lib|app|tools|agents)/[\w/.-]+"
+        # Match project file paths with extensions (avoid directory-only claims).
+        file_pattern = (
+            r"(?:src|lib|app|tools|agents)/[A-Za-z0-9_./-]*\.[A-Za-z0-9]{1,10}"
+        )
 
         matches = re.findall(file_pattern, text)
 
@@ -285,8 +286,10 @@ class PDFAnalyzer:
                 return match.group(1)
             return None
 
-        # Extract file references
-        file_pattern = r"(?:src|lib|app|tools|agents)/[\w/.-]+"
+        # Only verify concrete file claims, not directory mentions.
+        file_pattern = (
+            r"(?:src|lib|app|tools|agents)/[A-Za-z0-9_./-]*\.[A-Za-z0-9]{1,10}"
+        )
         claimed_files = {
             normalize_path(match) for match in re.findall(file_pattern, text)
         }

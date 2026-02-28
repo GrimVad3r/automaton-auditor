@@ -293,6 +293,7 @@ def _cross_reference_pdf_claims(
         pdf_text = pdf_analyzer._extract_text(pdf_file)
 
         verified_locations = []
+        repo_roots: set[Path] = set()
         for evidence in repo_evidence:
             if (
                 evidence.found
@@ -300,6 +301,26 @@ def _cross_reference_pdf_claims(
                 and ("/" in evidence.location or "\\" in evidence.location)
             ):
                 verified_locations.append(evidence.location)
+                normalized_location = str(evidence.location).replace("\\", "/")
+                if "/repo/" in normalized_location:
+                    root_candidate = normalized_location.split("/repo/", 1)[0] + "/repo"
+                    root_path = Path(root_candidate)
+                    if root_path.exists() and root_path.is_dir():
+                        repo_roots.add(root_path)
+
+        # Build a verified file inventory from the cloned repository to avoid
+        # false hallucination flags when PDFs cite real files that were not
+        # directly emitted as detective evidence locations.
+        allowed_ext = {".py", ".md", ".json", ".toml", ".yaml", ".yml"}
+        for repo_root in repo_roots:
+            try:
+                for file_path in repo_root.rglob("*"):
+                    if file_path.is_file() and file_path.suffix.lower() in allowed_ext:
+                        verified_locations.append(str(file_path))
+            except Exception as exc:
+                logger.warning(
+                    f"Failed to enumerate repository files for cross-reference: {exc}"
+                )
 
         cross_ref = pdf_analyzer.cross_reference_claims(pdf_text, verified_locations)
         return list(cross_ref.values())
