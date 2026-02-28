@@ -4,6 +4,8 @@ Provides CLI interface for running audits.
 """
 
 import sys
+import shutil
+import json
 from datetime import datetime
 from pathlib import Path
 import re
@@ -147,6 +149,35 @@ def _resolve_pdf_input(
     if is_remote_input:
         return _download_pdf_from_url(cleaned, output_dir / "_downloads")
     return _resolve_local_pdf_path(cleaned)
+
+
+def _store_peer_report(
+    pdf_input: str,
+    source_mode: Literal["auto", "local", "remote"] = "auto",
+    label: str | None = None,
+) -> Path:
+    """
+    Save a peer-provided PDF into audit/report_bypeer_received with a manifest entry.
+    """
+    output_dir = Path("audit") / "report_bypeer_received"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    resolved_pdf = _resolve_pdf_input(pdf_input, output_dir, source_mode=source_mode)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    dest = output_dir / f"peer_report_{timestamp}.pdf"
+    shutil.copy2(resolved_pdf, dest)
+
+    manifest = output_dir / "manifest.jsonl"
+    entry = {
+        "saved_as": dest.name,
+        "source": pdf_input,
+        "resolved_path": str(resolved_pdf),
+        "label": label or "peer_report",
+        "timestamp": timestamp,
+    }
+    with manifest.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry) + "\n")
+    return dest
 
 
 def _resolve_source_mode(
@@ -339,6 +370,48 @@ def self_audit(
     except Exception as e:
         console.print(f"\n[bold red]Unexpected error:[/bold red] {e}\n")
         logger.error(f"Unexpected error in self-audit: {e}", exc_info=True)
+        sys.exit(1)
+
+
+@app.command("receive-peer")
+def receive_peer(
+    pdf_path: str = typer.Argument(..., help="Peer's PDF report to store"),
+    local_pdf: bool = typer.Option(
+        False,
+        "--local",
+        "-l",
+        help="Treat pdf_path as a local filesystem path.",
+    ),
+    remote_pdf: bool = typer.Option(
+        False,
+        "--remote",
+        "-r",
+        help="Treat pdf_path as an HTTP(S) URL (including Google Drive links).",
+    ),
+    label: str = typer.Option(
+        "peer_report",
+        "--label",
+        "-L",
+        help="Optional label for manifest entry.",
+    ),
+):
+    """
+    Store a peer-provided audit PDF under audit/report_bypeer_received.
+    """
+    try:
+        pdf_source_mode = _resolve_source_mode(local_pdf, remote_pdf)
+        saved = _store_peer_report(pdf_path, source_mode=pdf_source_mode, label=label)
+        console.print(
+            f"\n[bold green]Saved peer report:[/bold green] {saved} "
+            f"(label: {label})"
+        )
+    except AutomatonAuditorException as e:
+        console.print(f"\n[bold red]Receive failed:[/bold red] {e}\n")
+        logger.error(f"Receive peer failed: {e}", exc_info=True)
+        sys.exit(1)
+    except Exception as e:
+        console.print(f"\n[bold red]Unexpected error:[/bold red] {e}\n")
+        logger.error(f"Unexpected error in receive-peer: {e}", exc_info=True)
         sys.exit(1)
 
 

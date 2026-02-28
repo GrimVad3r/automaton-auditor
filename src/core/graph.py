@@ -24,6 +24,23 @@ from ..utils.logger import get_logger
 logger = get_logger()
 
 
+def _safe_node(node_fn, node_name: str, empty_updates: Dict) -> callable:
+    """
+    Wrap a node so failures are recorded in state instead of terminating the graph.
+    """
+
+    def wrapper(state: AgentState) -> Dict:
+        try:
+            return node_fn(state)
+        except Exception as exc:
+            logger.log_node_error(node_name, exc)
+            updates = dict(empty_updates)
+            updates["errors"] = [f"{node_name}: {exc}"]
+            return updates
+
+    return wrapper
+
+
 def create_auditor_graph() -> StateGraph:
     """
     Create the hierarchical auditor graph with parallel execution.
@@ -67,29 +84,73 @@ def create_auditor_graph() -> StateGraph:
 
     # Layer 1: Detective nodes (parallel)
     config = get_config(require_llm_keys=False)
-    builder.add_node("repo_investigator", repo_investigator_node)
-    builder.add_node("doc_analyst", doc_analyst_node)
+    builder.add_node(
+        "repo_investigator",
+        _safe_node(
+            repo_investigator_node,
+            "RepoInvestigator",
+            {"evidences": {"RepoInvestigator": []}},
+        ),
+    )
+    builder.add_node(
+        "doc_analyst",
+        _safe_node(
+            doc_analyst_node,
+            "DocAnalyst",
+            {"evidences": {"DocAnalyst": []}},
+        ),
+    )
     detective_nodes = ["repo_investigator", "doc_analyst"]
     if config.enable_vision_inspector:
-        builder.add_node("vision_inspector", vision_inspector_node)
+        builder.add_node(
+            "vision_inspector",
+            _safe_node(
+                vision_inspector_node,
+                "VisionInspector",
+                {"evidences": {"VisionInspector": []}},
+            ),
+        )
         detective_nodes.append("vision_inspector")
         logger.info("VisionInspector node enabled")
     else:
         logger.info("VisionInspector node disabled")
 
     # Evidence aggregation node
-    builder.add_node("aggregate_evidence", aggregate_evidence_node)
+    builder.add_node(
+        "aggregate_evidence",
+        _safe_node(
+            aggregate_evidence_node,
+            "AggregateEvidence",
+            {"aggregated_evidence": None},
+        ),
+    )
 
     # Layer 2: Judge nodes (parallel)
-    builder.add_node("prosecutor", prosecutor_node)
-    builder.add_node("defense", defense_node)
-    builder.add_node("tech_lead", tech_lead_node)
+    builder.add_node(
+        "prosecutor",
+        _safe_node(prosecutor_node, "Prosecutor", {"opinions": []}),
+    )
+    builder.add_node("defense", _safe_node(defense_node, "Defense", {"opinions": []}))
+    builder.add_node(
+        "tech_lead", _safe_node(tech_lead_node, "TechLead", {"opinions": []})
+    )
 
     # Layer 3: Chief Justice synthesis
-    builder.add_node("chief_justice", chief_justice_node)
+    builder.add_node(
+        "chief_justice",
+        _safe_node(
+            chief_justice_node,
+            "ChiefJustice",
+            {
+                "final_scores": {},
+                "synthesis_summary": "Synthesis skipped due to earlier errors.",
+                "final_report": "",
+            },
+        ),
+    )
 
     # Finalization node
-    builder.add_node("finalize", finalize_node)
+    builder.add_node("finalize", _safe_node(finalize_node, "Finalize", {}))
 
     # Define edges - START to Initialize
     builder.set_entry_point("initialize")

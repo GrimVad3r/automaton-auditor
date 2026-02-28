@@ -369,7 +369,35 @@ Keep your argument concise (target 100-220 characters).
             payload = self._extract_json_payload(text)
 
         payload.setdefault("criterion_id", criterion_id)
-        return StructuredOpinion(**payload)
+        try:
+            structured = StructuredOpinion(**payload)
+        except Exception as exc:
+            logger.warning(
+                f"{self.judge_name} produced malformed output; "
+                f"defaulting to neutral opinion. Error: {exc}"
+            )
+            structured = StructuredOpinion(
+                criterion_id=criterion_id,
+                score=3,
+                argument=(
+                    "Model returned malformed opinion; defaulting to neutral score "
+                    "until a valid structured output is produced."
+                ),
+                cited_evidence=["malformed_output"],
+            )
+
+        # Guard rails: keep score in range and enforce minimum argument length.
+        if not 1 <= structured.score <= 5:
+            structured.score = 3
+        if len(structured.argument or "") < 100:
+            structured.argument = (
+                structured.argument
+                + " Additional verified evidence is required before stronger conclusions can be made."
+            )
+        if not structured.cited_evidence:
+            structured.cited_evidence = ["insufficient_verified_evidence"]
+
+        return structured
 
     def _extract_text_content(self, response) -> str:
         """Extract plain text content from LangChain response objects."""
@@ -401,7 +429,10 @@ Keep your argument concise (target 100-220 characters).
             if match:
                 candidate = match.group(0)
 
-        return json.loads(candidate)
+        try:
+            return json.loads(candidate)
+        except Exception as exc:
+            raise ValueError(f"Failed to parse JSON payload: {exc}") from exc
 
     # Override with token-budget-aware formatting for low-TPM providers.
     def _format_evidence_for_context(
