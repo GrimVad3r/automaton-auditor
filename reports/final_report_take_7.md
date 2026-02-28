@@ -6,19 +6,19 @@ Primary Model: mistralai/ministral-3-14b-reasoning via LM Studio (OPENAI_BASE_UR
 1. Executive Summary
 - Scope: Autonomous audit graph with detectives, judges, and Chief Justice for code + PDF inputs.
 - Latest self-audit outcome: 12/20 (recent run). Prior runs with same code: 14/20. Criterion scores: forensic_accuracy_code 4/5; forensic_accuracy_docs 2/5; judicial_nuance 4/5; langgraph_architecture 4/5.
-- Key takeaways: Security cleared via sandboxed git; parallel graph implemented; docs score low because PDF claims parallel judges/metacognition without explicit code citations; Vision disabled by default.
+- Key takeaways: Security cleared via sandboxed git; parallel graph implemented; docs score low when PDF claims are not tied to explicit code citations; Vision disabled by default.
 - Actionable next steps: Add explicit failure edges; tighten PDF-to-code citations; decide on Vision (enable with evidence or drop claim).
 
 2. Architecture Deep Dive and Design Rationale
 - Parallel fan-out/fan-in implemented in src/core/graph.py: initialize -> repo_investigator, doc_analyst (optional vision_inspector); aggregate_evidence -> prosecutor, defense, tech_lead; judges -> handle_error -> chief_justice -> finalize.
 - Dialectical synthesis: Prosecutor, Defense, Tech Lead run in parallel; Chief Justice (src/agents/justice/chief_justice.py) applies weighted synthesis with variance caps.
-- Grounding and metacognition: StructuredOpinion + _coerce_structured_response (src/agents/judges/base_judge.py) enforce JSON schema and prune unverified citations; force_json_mode for LM Studio to avoid tool-call errors.
+- Grounding and output validation: StructuredOpinion + _coerce_structured_response (src/agents/judges/base_judge.py) enforce JSON schema and prune unverified citations; force_json_mode for LM Studio to avoid tool-call errors.
 - Personas: Distinct prompts in src/agents/judges/prosecutor.py ("Trust No One"), defense.py ("Reward Effort"), tech_lead.py ("Does it actually work").
 - Security: RepositorySandbox.clone_repository in src/tools/git_tools.py; no raw os.system.
 - Rationale: Pydantic models in src/core/state.py for validation; deterministic synthesis rules for repeatability; VisionInspector remains disabled (not production-ready).
 
 Graph Flow (fan-out + fan-in)
-`mermaid
+```mermaid
 flowchart TD
     Start([START]) --> Init[Initialize]
     Init -->|fan-out| Repo[RepoInvestigator\n(sandboxed git)]
@@ -41,7 +41,7 @@ flowchart TD
       Def  -.-> SO2[StructuredOpinion JSON]
       Tech -.-> SO3[StructuredOpinion JSON]
     end
-`
+```
 
 3. Self-Audit Criterion Breakdown
 - forensic_accuracy_code: 4/5 (some runs 3/5). Evidence: sandboxed git (src/tools/git_tools.py); Pydantic models (src/core/state.py). Prosecutor noted missing explicit recovery edges.

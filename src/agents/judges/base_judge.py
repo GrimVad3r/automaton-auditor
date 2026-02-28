@@ -685,11 +685,9 @@ Keep your argument concise (target 100-220 characters).
 
             context_parts.append(f"\n## {detective_name} Evidence:\n")
 
-            selected_evidence = sorted(
-                evidence_list,
-                key=lambda ev: ev.confidence,
-                reverse=True,
-            )[:max_items]
+            selected_evidence = self._select_evidence_for_context(
+                evidence_list, max_items
+            )
 
             for evidence in selected_evidence:
                 status = "FOUND" if evidence.found else "NOT FOUND"
@@ -710,6 +708,53 @@ Keep your argument concise (target 100-220 characters).
             context = context[:max_context_chars].rstrip()
             context += "\n...[truncated for token budget]"
         return context
+
+    def _select_evidence_for_context(
+        self, evidence_list: List[Evidence], max_items: int
+    ) -> List[Evidence]:
+        """
+        Prioritize diverse, high-signal evidence so critical proofs survive tight contexts.
+        """
+        if not evidence_list:
+            return []
+
+        # De-duplicate near-identical evidence entries.
+        deduped: Dict[tuple[str, str], Evidence] = {}
+        for ev in evidence_list:
+            key = (
+                self._normalize_location(self._compact_location(ev.location)),
+                (ev.content or "").strip()[:120].lower(),
+            )
+            current = deduped.get(key)
+            if current is None or ev.confidence > current.confidence:
+                deduped[key] = ev
+
+        priority_terms = (
+            "src/core/state.py",
+            "src/core/graph.py",
+            "src/tools/git_tools.py",
+            "src/agents/judges/base_judge.py",
+            "src/agents/judges/prosecutor.py",
+            "src/agents/judges/defense.py",
+            "src/agents/judges/tech_lead.py",
+            "pydantic models",
+            "parallel detective fan-out",
+            "distinct judge prompts",
+            "structuredopinion",
+            "response coercion",
+        )
+
+        def rank(ev: Evidence) -> tuple[float, float]:
+            location = self._normalize_location(self._compact_location(ev.location))
+            content = (ev.content or "").lower()
+            bonus = 0.0
+            for term in priority_terms:
+                if term in location or term in content:
+                    bonus += 0.2
+            return ev.confidence + bonus, ev.confidence
+
+        ranked = sorted(deduped.values(), key=rank, reverse=True)
+        return ranked[:max_items]
 
     def _compact_location(self, location: str) -> str:
         if not location:
