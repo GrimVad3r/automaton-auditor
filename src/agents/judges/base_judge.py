@@ -88,11 +88,22 @@ class BaseJudge(ABC):
             and not self.config.openai_api_key
             and not self.config.anthropic_api_key
             and not self.config.groq_api_key
+        ) or bool(
+            self.config.openai_base_url
+            and "127.0.0.1" in self.config.openai_base_url
+            and not self.config.huggingface_api_key
+            and not self.config.anthropic_api_key
+            and not self.config.groq_api_key
         )
 
         # Initialize LLM with structured output
         self.raw_llm = self._build_llm()
-        self.llm = self._configure_structured_output(self.raw_llm)
+        # Local / JSON-only providers cannot handle OpenAI tool_choice payloads;
+        # skip structured output wrapper in force_json_mode.
+        if self.force_json_mode:
+            self.llm = self.raw_llm
+        else:
+            self.llm = self._configure_structured_output(self.raw_llm)
 
         logger.debug(
             f"Initialized {judge_name} with model {self.config.default_llm_model}"
@@ -237,6 +248,7 @@ Keep your argument concise (target 100-220 characters).
                 model=self.config.default_llm_model,
                 temperature=self.config.llm_temperature,
                 max_tokens=self.config.llm_max_output_tokens,
+                base_url=self.config.openai_base_url,
             )
 
         if self.config.anthropic_api_key:
@@ -333,6 +345,19 @@ Keep your argument concise (target 100-220 characters).
                     fallback_response, criterion_id
                 )
             except Exception as exc:
+                if self._is_insufficient_quota(exc):
+                    logger.warning(
+                        f"{self.judge_name} provider quota depleted; returning neutral opinion."
+                    )
+                    return StructuredOpinion(
+                        criterion_id=criterion_id,
+                        score=3,
+                        argument=self._pad_argument(
+                            "Provider quota exhausted (HTTP 402 or insufficient credits). "
+                            "Returning neutral opinion to keep pipeline moving."
+                        ),
+                        cited_evidence=["provider_quota_depleted"],
+                    )
                 if self._is_tool_use_failure(exc):
                     logger.warning(
                         f"{self.judge_name} structured function call failed in JSON-only mode; "
@@ -377,6 +402,19 @@ Keep your argument concise (target 100-220 characters).
             )
             return self._coerce_structured_response(fallback_response, criterion_id)
         except Exception as exc:
+            if self._is_insufficient_quota(exc):
+                logger.warning(
+                    f"{self.judge_name} provider quota depleted; returning neutral opinion."
+                )
+                return StructuredOpinion(
+                    criterion_id=criterion_id,
+                    score=3,
+                    argument=self._pad_argument(
+                        "Provider quota exhausted (HTTP 402 or insufficient credits). "
+                        "Returning neutral opinion to keep pipeline moving."
+                    ),
+                    cited_evidence=["provider_quota_depleted"],
+                )
             if self._is_tool_use_failure(exc):
                 logger.warning(
                     f"{self.judge_name} structured function call failed; retrying with JSON fallback."
@@ -415,6 +453,17 @@ Keep your argument concise (target 100-220 characters).
             "Rate limit reached",
             "tokens per minute",
             "insufficient_quota",
+        )
+        return any(marker in message for marker in markers)
+
+    def _is_insufficient_quota(self, exc: Exception) -> bool:
+        message = str(exc).lower()
+        markers = (
+            "insufficient_quota",
+            "quota",
+            "402",
+            "depleted your monthly included credits",
+            "payment required",
         )
         return any(marker in message for marker in markers)
 

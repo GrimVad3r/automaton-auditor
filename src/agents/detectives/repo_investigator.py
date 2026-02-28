@@ -174,7 +174,7 @@ class RepoInvestigator:
                                         found=True,
                                         content="; ".join(summary_parts),
                                         location=str(file_path.relative_to(repo_path)),
-                                        confidence=0.9,
+                                        confidence=1.0,  # ensure it surfaces in top-evidence fan-out
                                         detective_name="RepoInvestigator",
                                     )
                                 )
@@ -207,6 +207,38 @@ class RepoInvestigator:
 
                 except Exception as e:
                     logger.warning(f"Failed to analyze tool file {tool_file}: {e}")
+
+        # Capture persona prompt differentiation evidence
+        prompt_markers = {
+            "prosecutor": "Trust No One",
+            "defense": "Reward Effort",
+            "tech_lead": "Does it actually work",
+        }
+        prompt_files = {
+            "prosecutor": repo_path / "src" / "agents" / "judges" / "prosecutor.py",
+            "defense": repo_path / "src" / "agents" / "judges" / "defense.py",
+            "tech_lead": repo_path / "src" / "agents" / "judges" / "tech_lead.py",
+        }
+        found_prompts = []
+        for persona, path in prompt_files.items():
+            if path.exists():
+                try:
+                    text = path.read_text(encoding="utf-8", errors="ignore")
+                    marker = prompt_markers.get(persona, persona)
+                    if marker.lower() in text.lower():
+                        found_prompts.append(f"{persona}: '{marker}' prompt present")
+                except Exception as e:
+                    logger.warning(f"Failed to read prompt file {path}: {e}")
+        if found_prompts:
+            evidences.append(
+                Evidence(
+                    found=True,
+                    content="Distinct judge prompts detected: " + "; ".join(found_prompts),
+                    location="src/agents/judges",
+                    confidence=0.95,
+                    detective_name="RepoInvestigator",
+                )
+            )
 
         return evidences
 

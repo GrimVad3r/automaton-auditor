@@ -26,10 +26,14 @@ class Config(BaseSettings):
 
     # API Keys
     openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
+    openai_base_url: Optional[str] = Field(default=None, alias="OPENAI_BASE_URL")
     anthropic_api_key: Optional[str] = Field(default=None, alias="ANTHROPIC_API_KEY")
     groq_api_key: Optional[str] = Field(default=None, alias="GROQ_API_KEY")
     huggingface_api_key: Optional[str] = Field(
         default=None, alias="HUGGINGFACE_API_KEY"
+    )
+    openrouter_api_key: Optional[str] = Field(
+        default=None, alias="OPENROUTER_API_KEY"
     )
 
     # LangSmith Configuration
@@ -76,7 +80,7 @@ class Config(BaseSettings):
     llm_temperature: float = Field(default=0.1, alias="LLM_TEMPERATURE")
     llm_max_output_tokens: int = Field(default=400, alias="LLM_MAX_OUTPUT_TOKENS")
     llm_max_evidence_items_per_detective: int = Field(
-        default=4, alias="LLM_MAX_EVIDENCE_ITEMS_PER_DETECTIVE"
+        default=6, alias="LLM_MAX_EVIDENCE_ITEMS_PER_DETECTIVE"
     )
     llm_max_evidence_content_chars: int = Field(
         default=160, alias="LLM_MAX_EVIDENCE_CONTENT_CHARS"
@@ -126,6 +130,10 @@ class Config(BaseSettings):
         self.anthropic_api_key = self._normalize_api_key(self.anthropic_api_key)
         self.groq_api_key = self._normalize_api_key(self.groq_api_key)
         self.huggingface_api_key = self._normalize_api_key(self.huggingface_api_key)
+        self.openrouter_api_key = self._normalize_api_key(self.openrouter_api_key)
+        self.openai_base_url = (
+            self.openai_base_url.strip() if self.openai_base_url else None
+        )
 
         # API keys are required only for judge/LLM execution, not for tool-only flows.
         if (
@@ -152,6 +160,13 @@ class Config(BaseSettings):
                 "Disabling tracing to avoid runtime ingestion failures."
             )
             self.langchain_tracing_v2 = False
+
+        # Warn if local OpenAI-compatible server is configured without a key (most servers accept dummy keys)
+        if self.openai_base_url and not self.openai_api_key:
+            logger.warning(
+                "OPENAI_BASE_URL is set but OPENAI_API_KEY is missing; some providers may still require a token string. "
+                "Set OPENAI_API_KEY=lm-studio (or any non-empty string) for local OpenAI-compatible servers."
+            )
 
         # Validate numeric ranges
         if self.max_repo_size_mb <= 0:
@@ -199,6 +214,16 @@ class Config(BaseSettings):
             os.environ["OPENAI_API_KEY"] = self.openai_api_key
         else:
             os.environ.pop("OPENAI_API_KEY", None)
+
+        if self.openrouter_api_key:
+            os.environ["OPENROUTER_API_KEY"] = self.openrouter_api_key
+        else:
+            os.environ.pop("OPENROUTER_API_KEY", None)
+
+        if self.openai_base_url:
+            os.environ["OPENAI_BASE_URL"] = self.openai_base_url
+        else:
+            os.environ.pop("OPENAI_BASE_URL", None)
 
         if self.anthropic_api_key:
             os.environ["ANTHROPIC_API_KEY"] = self.anthropic_api_key
