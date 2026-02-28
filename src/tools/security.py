@@ -184,28 +184,31 @@ class RepositorySandbox:
                     # Work with repository at path
                     pass
         """
-        # Validate URL
+        success = False
+        repo_path: Optional[Path] = None
+        error: Optional[str] = None
+
+        # Validate URL once up front
         try:
             SecurityValidator.validate_git_url(
                 repo_url, allowed_domains=self.config.get_allowed_domains()
             )
         except Exception as e:
             logger.error(f"URL validation failed: {e}")
-            yield (False, None, str(e))
+            error = str(e)
+            yield (False, None, error)
             return
 
         with SandboxedExecutor.temporary_directory() as tmpdir:
             repo_path = tmpdir / "repo"
-
             try:
-                # Clone with safety parameters
                 logger.info(f"Cloning repository: {repo_url}")
                 return_code, stdout, stderr = SandboxedExecutor.run_git_command(
                     [
                         "clone",
                         "--depth",
-                        "1",  # Shallow clone
-                        "--single-branch",  # Only main branch
+                        "1",
+                        "--single-branch",
                         repo_url,
                         str(repo_path),
                     ],
@@ -214,33 +217,25 @@ class RepositorySandbox:
                 )
 
                 if return_code != 0:
-                    error_msg = f"Git clone failed: {stderr}"
-                    logger.error(error_msg)
-                    yield (False, None, error_msg)
-                    return
-
-                # Validate repository size
-                try:
-                    size_bytes = SecurityValidator.validate_directory_size(
-                        repo_path, max_size_mb=self.config.max_repo_size_mb
-                    )
-                    logger.info(
-                        f"Repository cloned successfully ({size_bytes / 1024 / 1024:.2f}MB)"
-                    )
-                except ResourceLimitError as e:
-                    logger.error(f"Repository size validation failed: {e}")
-                    yield (False, None, str(e))
-                    return
-
-                # Success
-                yield (True, repo_path, None)
-
+                    error = f"Git clone failed: {stderr}"
+                else:
+                    try:
+                        size_bytes = SecurityValidator.validate_directory_size(
+                            repo_path, max_size_mb=self.config.max_repo_size_mb
+                        )
+                        logger.info(
+                            f"Repository cloned successfully ({size_bytes / 1024 / 1024:.2f}MB)"
+                        )
+                        success = True
+                    except ResourceLimitError as e:
+                        error = str(e)
             except TimeoutError as e:
-                yield (False, None, f"Clone operation timed out: {e}")
-
+                error = f"Clone operation timed out: {e}"
             except Exception as e:
                 logger.error(f"Unexpected error during clone: {e}", exc_info=True)
-                yield (False, None, f"Clone failed: {e}")
+                error = f"Clone failed: {e}"
+
+            yield (success, repo_path if success else None, error)
 
     def analyze_git_history(
         self, repo_path: Path
