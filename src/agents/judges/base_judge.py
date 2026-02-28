@@ -90,11 +90,12 @@ class BaseJudge(ABC):
             and not self.config.groq_api_key
         ) or bool(
             self.config.openai_base_url
-            and "127.0.0.1" in self.config.openai_base_url
-            and not self.config.huggingface_api_key
-            and not self.config.anthropic_api_key
-            and not self.config.groq_api_key
-        )
+            and (
+                "127.0.0.1" in self.config.openai_base_url
+                or "localhost" in self.config.openai_base_url
+                or True  # any custom OpenAI-compatible base URL: avoid tool_choice payloads
+            )
+        ) or bool(self.config.openai_base_url and not self.config.openai_api_key)
 
         # Initialize LLM with structured output
         self.raw_llm = self._build_llm()
