@@ -120,13 +120,66 @@ class RepoInvestigator:
                     file_evidences = ast_analyzer.analyze_file(file_path)
                     evidences.extend(file_evidences.values())
 
-                    # Specifically check for LangGraph definition
+                    # Specifically check for LangGraph definition and orchestration details
                     if "graph" in file_pattern.lower():
                         graph_evidence = ast_analyzer.find_langgraph_definition(
                             file_path
                         )
                         if graph_evidence:
                             evidences.append(graph_evidence)
+
+                        try:
+                            graph_text = file_path.read_text(encoding="utf-8", errors="ignore")
+                            fan_out_detected = (
+                                "add_edge(\"initialize\"" in graph_text
+                                or "add_edge('initialize'" in graph_text
+                            ) and (
+                                "repo_investigator" in graph_text
+                                and "doc_analyst" in graph_text
+                            )
+                            judges_parallel = (
+                                "add_edge(\"aggregate_evidence\"" in graph_text
+                                or "add_edge('aggregate_evidence'" in graph_text
+                            ) and (
+                                "prosecutor" in graph_text
+                                and "defense" in graph_text
+                                and "tech_lead" in graph_text
+                            )
+                            error_handler = "handle_error" in graph_text
+                            conditional_edges = (
+                                "safe_node" in graph_text or "FAIL_FAST" in graph_text
+                            )
+
+                            summary_parts = []
+                            if fan_out_detected:
+                                summary_parts.append(
+                                    "Parallel detective fan-out from initialize to repo_investigator and doc_analyst"
+                                )
+                            if judges_parallel:
+                                summary_parts.append(
+                                    "Parallel judge fan-out from aggregate_evidence to prosecutor, defense, tech_lead"
+                                )
+                            if error_handler:
+                                summary_parts.append(
+                                    "Central handle_error node routes failures before ChiefJustice"
+                                )
+                            if conditional_edges:
+                                summary_parts.append(
+                                    "safe_node wrapper and FAIL_FAST toggle provide conditional error handling edges"
+                                )
+
+                            if summary_parts:
+                                evidences.append(
+                                    Evidence(
+                                        found=True,
+                                        content="; ".join(summary_parts),
+                                        location=str(file_path.relative_to(repo_path)),
+                                        confidence=0.9,
+                                        detective_name="RepoInvestigator",
+                                    )
+                                )
+                        except Exception as e:
+                            logger.warning(f"Failed to summarize graph structure: {e}")
 
                 except Exception as e:
                     logger.warning(f"Failed to analyze {file_pattern}: {e}")

@@ -320,6 +320,18 @@ Keep your argument concise (target 100-220 characters).
                     operation="json_only_invoke",
                 )
                 return self._coerce_structured_response(response, criterion_id)
+            except (ValidationError, OutputParserException) as exc:
+                logger.warning(
+                    f"{self.judge_name} structured output validation failed in JSON-only mode; "
+                    f"retrying with raw JSON fallback. Error: {exc}"
+                )
+                fallback_response = self._invoke_with_rate_limit_retry(
+                    lambda: self.raw_llm.invoke(json_prompt),
+                    operation="json_only_fallback_invoke",
+                )
+                return self._coerce_structured_response(
+                    fallback_response, criterion_id
+                )
             except Exception as exc:
                 if self._is_tool_use_failure(exc):
                     logger.warning(
