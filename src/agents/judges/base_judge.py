@@ -314,11 +314,26 @@ Keep your argument concise (target 100-220 characters).
                     ),
                 }
             ]
-            response = self._invoke_with_rate_limit_retry(
-                lambda: self.llm.invoke(json_prompt),
-                operation="json_only_invoke",
-            )
-            return self._coerce_structured_response(response, criterion_id)
+            try:
+                response = self._invoke_with_rate_limit_retry(
+                    lambda: self.llm.invoke(json_prompt),
+                    operation="json_only_invoke",
+                )
+                return self._coerce_structured_response(response, criterion_id)
+            except Exception as exc:
+                if self._is_tool_use_failure(exc):
+                    logger.warning(
+                        f"{self.judge_name} structured function call failed in JSON-only mode; "
+                        "retrying with raw JSON fallback."
+                    )
+                    fallback_response = self._invoke_with_rate_limit_retry(
+                        lambda: self.raw_llm.invoke(json_prompt),
+                        operation="json_only_fallback_invoke",
+                    )
+                    return self._coerce_structured_response(
+                        fallback_response, criterion_id
+                    )
+                raise
 
         try:
             response = self._invoke_with_rate_limit_retry(
