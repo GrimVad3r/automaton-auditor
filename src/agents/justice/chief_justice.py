@@ -60,8 +60,10 @@ class ChiefJustice:
             )
             criterion_id = criterion["id"]
             criterion_opinions = opinions_by_criterion.get(criterion_id, [])
+            target_artifact = criterion.get("target_artifact")
+            missing_artifact = self._is_target_missing(target_artifact, evidences)
             score, note = self._resolve_criterion(
-                criterion_id, criterion_opinions, synthesis_rules
+                criterion_id, criterion_opinions, synthesis_rules, missing_artifact
             )
             final_scores[criterion_id] = score
             synthesis_notes.append(note)
@@ -108,6 +110,7 @@ class ChiefJustice:
         criterion_id: str,
         opinions: List[JudicialOpinion],
         synthesis_rules: Dict[str, str],
+        missing_artifact: bool = False,
     ) -> Tuple[int, str]:
         """
         Resolve conflicting opinions for a single criterion.
@@ -149,6 +152,11 @@ class ChiefJustice:
         # Calculate variance
         scores = [prosecutor_score, defense_score, tech_lead_score]
         variance = max(scores) - min(scores)
+
+        # Missing artifact cap (e.g., vision disabled)
+        missing_cap = 5
+        if missing_artifact and synthesis_rules.get("missing_vision_cap"):
+            missing_cap = min(missing_cap, 4)
 
         # Rule: High variance (>2) triggers re-evaluation logic
         if variance > 2:
@@ -193,7 +201,16 @@ class ChiefJustice:
             )
 
         # Ensure score is in valid range
-        final_score = max(1, min(5, final_score))
+        final_score = max(1, min(missing_cap, final_score))
+
+        # High variance plus missing evidence cap
+        if (
+            variance > 2
+            and synthesis_rules.get("high_variance_missing_evidence")
+            and missing_artifact
+        ):
+            final_score = min(final_score, 3)
+            note += " Missing evidence for target artifact; capped at 3."
 
         return final_score, note
 
@@ -229,6 +246,18 @@ The following principles guided the final verdicts:
             summary += f"- {note}\n"
 
         return summary.strip()
+
+    def _is_target_missing(self, target_artifact: str, evidences: Dict[str, list]) -> bool:
+        """Check if any evidence exists for the target artifact."""
+        if not target_artifact:
+            return False
+        if target_artifact == "pdf_report":
+            return not any(
+                k in evidences and evidences[k] for k in ("DocAnalyst", "VisionInspector", "CrossReference")
+            )
+        if target_artifact == "github_repo":
+            return not any(k in evidences and evidences[k] for k in ("RepoInvestigator",))
+        return False
 
 
 # Node function for LangGraph

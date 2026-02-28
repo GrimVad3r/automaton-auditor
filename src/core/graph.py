@@ -4,6 +4,7 @@ Implements the three-layer hierarchical state graph.
 """
 
 import time
+import os
 from pathlib import Path
 from typing import Dict
 
@@ -22,6 +23,19 @@ from ..tools import PDFAnalyzer
 from ..utils.logger import get_logger
 
 logger = get_logger()
+FAIL_FAST = os.getenv("AUDITOR_FAIL_FAST", "true").lower() == "true"
+
+
+def handle_error_node(state: AgentState) -> Dict:
+    """
+    Centralized error handler to ensure synthesis is aware of failures.
+    """
+    logger.log_node_start("HandleError")
+    errors = state.get("errors", [])
+    if errors:
+        logger.warning(f"Errors detected upstream: {errors}")
+    logger.log_node_complete("HandleError", 0.01)
+    return {"errors": errors}
 
 
 def _safe_node(node_fn, node_name: str, empty_updates: Dict) -> callable:
@@ -34,6 +48,8 @@ def _safe_node(node_fn, node_name: str, empty_updates: Dict) -> callable:
             return node_fn(state)
         except Exception as exc:
             logger.log_node_error(node_name, exc)
+            if FAIL_FAST:
+                raise
             updates = dict(empty_updates)
             updates["errors"] = [f"{node_name}: {exc}"]
             return updates
@@ -135,6 +151,9 @@ def create_auditor_graph() -> StateGraph:
         "tech_lead", _safe_node(tech_lead_node, "TechLead", {"opinions": []})
     )
 
+    # Error handling node
+    builder.add_node("handle_error", handle_error_node)
+
     # Layer 3: Chief Justice synthesis
     builder.add_node(
         "chief_justice",
@@ -168,10 +187,11 @@ def create_auditor_graph() -> StateGraph:
     builder.add_edge("aggregate_evidence", "defense")
     builder.add_edge("aggregate_evidence", "tech_lead")
 
-    # Fan-in: Judges to Chief Justice
-    builder.add_edge("prosecutor", "chief_justice")
-    builder.add_edge("defense", "chief_justice")
-    builder.add_edge("tech_lead", "chief_justice")
+    # Fan-in: Judges to error handler then Chief Justice
+    builder.add_edge("prosecutor", "handle_error")
+    builder.add_edge("defense", "handle_error")
+    builder.add_edge("tech_lead", "handle_error")
+    builder.add_edge("handle_error", "chief_justice")
 
     # Chief Justice to Finalize
     builder.add_edge("chief_justice", "finalize")

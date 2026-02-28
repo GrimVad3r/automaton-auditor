@@ -113,6 +113,45 @@ class MarkdownReportFormatter:
         return report
 
     @staticmethod
+    def format_triage_report(
+        repo_url: str,
+        pdf_path: str,
+        final_scores: Dict[str, int],
+        synthesis_summary: str,
+        remediation: str,
+        execution_time: float,
+    ) -> str:
+        """Generate a concise remediation-focused report."""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        total_score = sum(final_scores.values())
+        max_score = len(final_scores) * 5
+        percentage = (total_score / max_score * 100) if max_score > 0 else 0
+
+        report = f"""# Automaton Auditor Triage Report
+
+**Generated:** {timestamp}<br>
+**Execution Time:** {execution_time:.2f} seconds<br>
+**Repository:** {repo_url}<br>
+**Report Document:** {pdf_path}
+
+---
+
+## Scores
+"""
+        report += "| Criterion | Score |\n|-----------|-------|\n"
+        for criterion_id, score in final_scores.items():
+            report += f"| {criterion_id} | {score}/5 |\n"
+        report += f"\n**Total:** {total_score}/{max_score} ({percentage:.1f}%)\n\n"
+
+        report += "## Synthesis Summary\n\n"
+        report += synthesis_summary or "No synthesis summary available.\n\n"
+
+        report += "## Remediation Plan (Condensed)\n\n"
+        report += remediation or "No remediation items.\n"
+
+        return report
+
+    @staticmethod
     def _generate_remediation(
         final_scores: Dict[str, int],
         opinions_by_criterion: Dict[str, List[JudicialOpinion]],

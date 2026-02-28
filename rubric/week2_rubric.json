@@ -53,7 +53,9 @@
   "synthesis_rules": {
     "security_override": "Confirmed security flaws (e.g., shell injection in git tools) cap total score at 3.",
     "fact_supremacy": "Forensic evidence (facts) always overrules Judicial opinion (interpretation).",
-    "dissent_requirement": "The Chief Justice must summarize why the Prosecutor and Defense disagreed in the final report."
+    "dissent_requirement": "The Chief Justice must summarize why the Prosecutor and Defense disagreed in the final report.",
+    "missing_vision_cap": "If target artifact is pdf_report and VisionInspector failed or is disabled, cap that criterion at 4.",
+    "high_variance_missing_evidence": "If judge variance >2 AND any detective provided zero evidence for the target artifact, cap score at 3."
   }
 }
 

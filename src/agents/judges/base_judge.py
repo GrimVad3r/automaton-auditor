@@ -120,7 +120,12 @@ class BaseJudge(ABC):
         logger.info(f"{self.judge_name} evaluating criterion: {criterion_id}")
 
         # Build evidence context
-        evidence_context = self._format_evidence_for_context(evidences, criterion_data)
+        filtered_evidence = self._filter_evidence_by_target(
+            evidences, criterion_data.get("target_artifact")
+        )
+        evidence_context = self._format_evidence_for_context(
+            filtered_evidence, criterion_data
+        )
 
         # Get judicial logic for this persona
         judicial_instruction = criterion_data["judicial_logic"].get(
@@ -398,6 +403,18 @@ Keep your argument concise (target 100-220 characters).
             structured.cited_evidence = ["insufficient_verified_evidence"]
 
         return structured
+
+    def _filter_evidence_by_target(
+        self, evidences: Dict[str, List[Evidence]], target_artifact: str | None
+    ) -> Dict[str, List[Evidence]]:
+        """Limit evidence to detectors relevant to the rubric target."""
+        if not target_artifact:
+            return evidences
+        allowed = {
+            "github_repo": {"RepoInvestigator"},
+            "pdf_report": {"DocAnalyst", "VisionInspector", "CrossReference"},
+        }.get(target_artifact, set())
+        return {k: v for k, v in evidences.items() if k in allowed}
 
     def _extract_text_content(self, response) -> str:
         """Extract plain text content from LangChain response objects."""

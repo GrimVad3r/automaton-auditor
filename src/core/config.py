@@ -67,6 +67,9 @@ class Config(BaseSettings):
     default_huggingface_model: str = Field(
         default="meta-llama/Llama-3.1-8B-Instruct", alias="DEFAULT_HUGGINGFACE_MODEL"
     )
+    default_vision_model: str = Field(
+        default="gpt-4o-mini", alias="DEFAULT_VISION_MODEL"
+    )
     huggingface_base_url: str = Field(
         default="https://router.huggingface.co/v1", alias="HUGGINGFACE_BASE_URL"
     )
