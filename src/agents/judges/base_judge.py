@@ -868,10 +868,7 @@ Keep your argument concise (target 100-220 characters).
             if not normalized_citation.startswith("http"):
                 return False
 
-        for location in allowed_locations:
-            if location in normalized_citation or normalized_citation in location:
-                return True
-        return False
+        return self._is_location_supported(normalized_citation, allowed_locations)
 
     def _fallback_citations(self, evidences: Dict[str, List[Evidence]]) -> List[str]:
         """Fallback to top evidence locations when model citations are ungrounded."""
@@ -895,15 +892,37 @@ Keep your argument concise (target 100-220 characters).
         for match in path_pattern.finditer(argument):
             referenced_path = match.group(0)
             normalized_path = self._normalize_location(referenced_path)
-            is_verified = any(
-                normalized_path == location
-                or normalized_path in location
-                or location.endswith(normalized_path)
-                for location in allowed_locations
-            )
+            is_verified = self._is_location_supported(normalized_path, allowed_locations)
             if not is_verified:
                 unverified.append(referenced_path)
         return unverified
+
+    def _is_location_supported(
+        self, normalized_path: str, allowed_locations: List[str]
+    ) -> bool:
+        """
+        Determine whether a referenced path is supported by known locations.
+        Includes conservative aliases for legacy path mentions.
+        """
+        for location in allowed_locations:
+            if (
+                normalized_path == location
+                or normalized_path in location
+                or location.endswith(normalized_path)
+            ):
+                return True
+
+        alias_map = {
+            "src/state.py": "src/core/state.py",
+            "src/graph.py": "src/core/graph.py",
+        }
+        alias = alias_map.get(normalized_path)
+        if alias:
+            for location in allowed_locations:
+                if alias == location or alias in location or location.endswith(alias):
+                    return True
+
+        return False
 
     def _prune_unverified_claim_sentences(
         self,
@@ -1003,6 +1022,11 @@ Keep your argument concise (target 100-220 characters).
                     ),
                     re.compile(r"\bno mention of sandbox", re.IGNORECASE),
                     re.compile(r"\blacks?\b.*\bsandbox", re.IGNORECASE),
+                    re.compile(r"\babsence of explicit sandbox", re.IGNORECASE),
+                    re.compile(r"\bno explicit sandbox", re.IGNORECASE),
+                    re.compile(
+                        r"\bwithout\b.*\bsandbox(?:ing|ed)?\b", re.IGNORECASE
+                    ),
                 ]
             )
 
@@ -1013,6 +1037,14 @@ Keep your argument concise (target 100-220 characters).
                     re.compile(r"\bno parallel\w*\b", re.IGNORECASE),
                     re.compile(
                         r"\bno code implements\b.*\b(parallel|fan-out|fan-in)\b",
+                        re.IGNORECASE,
+                    ),
+                    re.compile(
+                        r"\bno proof of\b.*\bparallel(?:ism| judges| execution)?\b",
+                        re.IGNORECASE,
+                    ),
+                    re.compile(
+                        r"\bparallel(?:ism| judges)?\b.*\bremains unverified\b",
                         re.IGNORECASE,
                     ),
                 ]

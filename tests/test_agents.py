@@ -247,14 +247,14 @@ class TestProsecutor:
         }
 
         long_argument = (
-            "The implementation references src/graph.py and claims parity with src/core/graph.py. "
+            "The implementation references src/graphx.py and claims parity with src/core/graph.py. "
             "This narrative is intentionally long enough to satisfy minimum length requirements."
         )
         grounded_response = StructuredOpinion(
             criterion_id="test_criterion",
             score=4,
             argument=long_argument,
-            cited_evidence=["src/graph.py"],
+            cited_evidence=["src/graphx.py"],
         )
 
         with patch.object(
@@ -264,7 +264,7 @@ class TestProsecutor:
 
         assert "[UNVERIFIED_PATH]" in opinion.argument
         assert opinion.score == 3
-        assert all("src/graph.py" not in cite for cite in opinion.cited_evidence)
+        assert all("src/graphx.py" not in cite for cite in opinion.cited_evidence)
 
     def test_opinion_grounding_removes_unsupported_quant_claims(self, sample_rubric):
         """Unsupported percentage claims should be pruned and penalized."""
@@ -389,6 +389,81 @@ class TestProsecutor:
         assert "failing to implement sandboxed git clone" not in opinion.argument.lower()
         assert "Claims contradicting verified evidence were removed." in opinion.argument
         assert opinion.score == 3
+
+    def test_opinion_grounding_removes_no_proof_parallel_claims(
+        self, sample_rubric
+    ):
+        """Claims that no proof of parallelism exists should be removed when evidence proves it."""
+        judge = Prosecutor()
+        criterion = sample_rubric["dimensions"][0]
+        evidences = {
+            "RepoInvestigator": [
+                Evidence(
+                    found=True,
+                    content=(
+                        "Parallel detective fan-out from initialize to repo_investigator "
+                        "and doc_analyst; Parallel judge fan-out from aggregate_evidence "
+                        "to prosecutor, defense, tech_lead"
+                    ),
+                    location="src/core/graph.py",
+                    confidence=1.0,
+                    detective_name="RepoInvestigator",
+                )
+            ]
+        }
+        grounded_response = StructuredOpinion(
+            criterion_id="test_criterion",
+            score=2,
+            argument=(
+                "I charge the defendant because no proof of parallelism exists in the code. "
+                "This long sentence is only to satisfy validation constraints with enough "
+                "detail to maintain argument length."
+            ),
+            cited_evidence=["src/core/graph.py"],
+        )
+
+        with patch.object(
+            judge, "_invoke_with_fallback", return_value=grounded_response
+        ):
+            opinion = judge.render_opinion(criterion, evidences)
+
+        assert "no proof of parallelism exists" not in opinion.argument.lower()
+        assert "Claims contradicting verified evidence were removed." in opinion.argument
+        assert opinion.score == 2
+
+    def test_opinion_grounding_accepts_legacy_core_alias_paths(self, sample_rubric):
+        """Legacy path mentions like src/state.py should map to src/core/state.py."""
+        judge = Prosecutor()
+        criterion = sample_rubric["dimensions"][0]
+        evidences = {
+            "RepoInvestigator": [
+                Evidence(
+                    found=True,
+                    content="Pydantic models found in src/core/state.py",
+                    location="src/core/state.py",
+                    confidence=0.95,
+                    detective_name="RepoInvestigator",
+                )
+            ]
+        }
+        grounded_response = StructuredOpinion(
+            criterion_id="test_criterion",
+            score=4,
+            argument=(
+                "The state model in src/state.py is strongly typed and supports robust "
+                "validation. This sentence intentionally stays long enough to satisfy "
+                "the minimum output-length requirement."
+            ),
+            cited_evidence=["src/state.py"],
+        )
+
+        with patch.object(
+            judge, "_invoke_with_fallback", return_value=grounded_response
+        ):
+            opinion = judge.render_opinion(criterion, evidences)
+
+        assert "[UNVERIFIED_PATH]" not in opinion.argument
+        assert any("src/core/state.py" in cite or "src/state.py" in cite for cite in opinion.cited_evidence)
 
 
 class TestDefense:
