@@ -336,6 +336,60 @@ class TestProsecutor:
         assert "src/tools/" not in opinion.cited_evidence
         assert any("src/tools/security.py" in cite for cite in opinion.cited_evidence)
 
+    def test_opinion_grounding_removes_contradicted_absence_claims(
+        self, sample_rubric
+    ):
+        """Claims contradicting verified sandbox/parallel evidence should be removed."""
+        judge = Prosecutor()
+        criterion = sample_rubric["dimensions"][0]
+        evidences = {
+            "RepoInvestigator": [
+                Evidence(
+                    found=True,
+                    content=(
+                        "RepositorySandbox.clone_repository is used for git cloning; "
+                        "git operations are executed without raw os.system calls."
+                    ),
+                    location="src/tools/git_tools.py",
+                    confidence=0.97,
+                    detective_name="RepoInvestigator",
+                ),
+                Evidence(
+                    found=True,
+                    content=(
+                        "Parallel detective fan-out from initialize to repo_investigator "
+                        "and doc_analyst; Parallel judge fan-out from aggregate_evidence "
+                        "to prosecutor, defense, tech_lead"
+                    ),
+                    location="src/core/graph.py",
+                    confidence=1.0,
+                    detective_name="RepoInvestigator",
+                ),
+            ]
+        }
+
+        argument = (
+            "I charge the defendant with Security Negligence for failing to implement "
+            "sandboxed git clone operations in src/tools/. "
+            "The design is otherwise complete and this sentence keeps the response long "
+            "enough for validation with clear supporting context."
+        )
+        grounded_response = StructuredOpinion(
+            criterion_id="test_criterion",
+            score=2,
+            argument=argument,
+            cited_evidence=["src/tools/git_tools.py"],
+        )
+
+        with patch.object(
+            judge, "_invoke_with_fallback", return_value=grounded_response
+        ):
+            opinion = judge.render_opinion(criterion, evidences)
+
+        assert "failing to implement sandboxed git clone" not in opinion.argument.lower()
+        assert "Claims contradicting verified evidence were removed." in opinion.argument
+        assert opinion.score == 3
+
 
 class TestDefense:
     """Tests for Defense judge."""

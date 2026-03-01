@@ -72,6 +72,18 @@ class TestPDFAnalyzer:
             if key.startswith("concept_"):
                 assert evidences[key].found is False
 
+    def test_analyze_content_detects_extended_rubric_terms(self, analyzer, temp_dir):
+        """Extended synonym terms should count toward concept detection."""
+        test_text = """
+        The self-audit feedback loop improved quality through bidirectional learning.
+        State synchronization happens at aggregate_evidence and handle_error before chief_justice.
+        """
+
+        evidences = analyzer._analyze_content(test_text, temp_dir / "test.pdf")
+
+        assert evidences["concept_metacognition"].found is True
+        assert evidences["concept_state_synchronization"].found is True
+
     def test_extract_file_references(self, analyzer, temp_dir):
         """Test extraction of file path references."""
         test_text = """

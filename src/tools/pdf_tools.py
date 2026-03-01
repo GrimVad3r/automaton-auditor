@@ -161,18 +161,26 @@ class PDFAnalyzer:
                 "metacognition",
                 "thinking about thinking",
                 "meta-cognitive",
+                "feedback loop",
+                "reflection",
+                "bidirectional learning",
+                "self-audit",
             ],
             "fan_out_fan_in": [
                 "fan-out",
                 "fan-in",
                 "parallel execution",
                 "parallelism",
+                "parallel judges",
             ],
             "state_synchronization": [
                 "state synchronization",
                 "state reducer",
                 "operator.add",
                 "operator.ior",
+                "aggregate_evidence",
+                "handle_error",
+                "chief_justice",
             ],
         }
 

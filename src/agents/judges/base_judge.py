@@ -171,6 +171,8 @@ class BaseJudge(ABC):
 **YOUR TASK:**
 As the {self.judge_name}, evaluate this criterion based on the evidence.
 You must return a score (1-5) with detailed reasoning that cites specific evidence.
+Do not claim a feature is missing if FOUND evidence already confirms it.
+If evidence is mixed, state uncertainty instead of absolute absence.
 
 Score 1: Critical failure / Security violation / Missing entirely
 Score 2: Major gaps / Significant issues
@@ -796,6 +798,13 @@ Keep your argument concise (target 100-220 characters).
         if removed_claims:
             penalties += 1
 
+        argument, contradicted_claims = self._remove_contradicted_claim_sentences(
+            argument, evidences
+        )
+        if contradicted_claims:
+            adjusted_score = min(5, adjusted_score + 1)
+            argument += " Claims contradicting verified evidence were removed."
+
         if penalties:
             adjusted_score = max(1, adjusted_score - penalties)
             argument += " Unverified claims were removed from this opinion."
@@ -971,3 +980,109 @@ Keep your argument concise (target 100-220 characters).
         )
         overlap = sentence_tokens & evidence_tokens
         return len(overlap) >= 2
+
+    def _remove_contradicted_claim_sentences(
+        self, argument: str, evidences: Dict[str, List[Evidence]]
+    ) -> tuple[str, int]:
+        """
+        Remove claims that explicitly contradict strong, verified evidence.
+        """
+        sentences = re.split(r"(?<=[.!?])\s+", argument.strip())
+        if not sentences:
+            return argument, 0
+
+        evidence_text = self._build_evidence_text(evidences)
+        active_patterns: List[re.Pattern[str]] = []
+
+        if self._has_sandbox_evidence(evidence_text):
+            active_patterns.extend(
+                [
+                    re.compile(
+                        r"\bfail\w*\s+to\s+implement\s+sandbox(?:ed)?\s+git\b",
+                        re.IGNORECASE,
+                    ),
+                    re.compile(r"\bno mention of sandbox", re.IGNORECASE),
+                    re.compile(r"\blacks?\b.*\bsandbox", re.IGNORECASE),
+                ]
+            )
+
+        if self._has_parallel_graph_evidence(evidence_text):
+            active_patterns.extend(
+                [
+                    re.compile(r"\blinear graph\b", re.IGNORECASE),
+                    re.compile(r"\bno parallel\w*\b", re.IGNORECASE),
+                    re.compile(
+                        r"\bno code implements\b.*\b(parallel|fan-out|fan-in)\b",
+                        re.IGNORECASE,
+                    ),
+                ]
+            )
+
+        if self._has_distinct_persona_evidence(evidence_text):
+            active_patterns.extend(
+                [
+                    re.compile(
+                        r"\bshared\s+\d{1,3}%\s+identical prompt\b",
+                        re.IGNORECASE,
+                    ),
+                    re.compile(r"\bpersona collusion\b", re.IGNORECASE),
+                    re.compile(r"\black of distinct judicial logic\b", re.IGNORECASE),
+                ]
+            )
+
+        if not active_patterns:
+            return argument, 0
+
+        kept_sentences: List[str] = []
+        removed_count = 0
+        for sentence in sentences:
+            normalized = self._normalize_location(sentence)
+            if any(pattern.search(normalized) for pattern in active_patterns):
+                removed_count += 1
+                continue
+            kept_sentences.append(sentence)
+
+        cleaned = " ".join(kept_sentences).strip()
+        if not cleaned:
+            cleaned = "Opinion retained only where verifiable evidence exists."
+        return cleaned, removed_count
+
+    def _build_evidence_text(self, evidences: Dict[str, List[Evidence]]) -> str:
+        """Flatten found evidence into one normalized text blob for rule checks."""
+        parts: List[str] = []
+        for evidence_list in evidences.values():
+            for evidence in evidence_list:
+                if not evidence.found:
+                    continue
+                parts.append(f"{evidence.location} {evidence.content or ''}")
+        return self._normalize_location(" ".join(parts))
+
+    def _has_sandbox_evidence(self, evidence_text: str) -> bool:
+        """Detect strong proof that sandboxed git behavior is implemented."""
+        required_terms = (
+            "sandboxed_git_clone",
+            "repositorysandbox.clone_repository",
+            "src/tools/git_tools.py",
+            "without raw os.system",
+        )
+        return any(term in evidence_text for term in required_terms)
+
+    def _has_parallel_graph_evidence(self, evidence_text: str) -> bool:
+        """Detect strong proof of non-linear graph orchestration."""
+        return (
+            "parallel detective fan-out" in evidence_text
+            or "parallel judge fan-out" in evidence_text
+            or "stategraph found with parallel architecture" in evidence_text
+            or "src/core/graph.py" in evidence_text
+        )
+
+    def _has_distinct_persona_evidence(self, evidence_text: str) -> bool:
+        """Detect proof that persona prompts are differentiated."""
+        return (
+            "distinct judge prompts detected" in evidence_text
+            or (
+                "trust no one" in evidence_text
+                and "reward effort" in evidence_text
+                and "does it actually work" in evidence_text
+            )
+        )
