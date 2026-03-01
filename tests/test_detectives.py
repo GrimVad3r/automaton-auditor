@@ -36,6 +36,56 @@ class TestRepoInvestigator:
         assert evidence.confidence == 0.95
         assert evidence.detective_name == "TestDetective"
 
+    def test_emits_critical_component_evidence(self, temp_dir):
+        """Critical architecture files should be emitted as explicit evidence."""
+        repo_path = temp_dir / "repo"
+        (repo_path / "src" / "core").mkdir(parents=True)
+        (repo_path / "src" / "tools").mkdir(parents=True)
+        (repo_path / "src" / "agents" / "judges").mkdir(parents=True)
+        (repo_path / "src" / "agents" / "justice").mkdir(parents=True)
+
+        (repo_path / "src" / "core" / "state.py").write_text(
+            "from pydantic import BaseModel\nclass Evidence(BaseModel):\n    found: bool\n"
+        )
+        (repo_path / "src" / "core" / "graph.py").write_text(
+            "def build(builder):\n"
+            "    builder.add_edge('initialize', 'repo_investigator')\n"
+            "    builder.add_edge('initialize', 'doc_analyst')\n"
+            "    builder.add_edge('aggregate_evidence', 'prosecutor')\n"
+            "    builder.add_edge('aggregate_evidence', 'defense')\n"
+            "    builder.add_edge('aggregate_evidence', 'tech_lead')\n"
+            "    builder.add_edge('prosecutor', 'handle_error')\n"
+            "    builder.add_edge('defense', 'handle_error')\n"
+            "    builder.add_edge('tech_lead', 'handle_error')\n"
+        )
+        (repo_path / "src" / "tools" / "git_tools.py").write_text(
+            "class RepositorySandbox:\n    pass\n"
+        )
+        (repo_path / "src" / "agents" / "judges" / "prosecutor.py").write_text(
+            "SYSTEM_PROMPT = 'Trust No One'\n"
+        )
+        (repo_path / "src" / "agents" / "judges" / "defense.py").write_text(
+            "SYSTEM_PROMPT = 'Reward Effort'\n"
+        )
+        (repo_path / "src" / "agents" / "judges" / "tech_lead.py").write_text(
+            "SYSTEM_PROMPT = 'Does it actually work'\n"
+        )
+        (repo_path / "src" / "agents" / "judges" / "base_judge.py").write_text(
+            "class StructuredOpinion:\n    pass\n\n"
+            "def _coerce_structured_response():\n    return None\n"
+        )
+        (repo_path / "src" / "agents" / "justice" / "chief_justice.py").write_text(
+            "class ChiefJustice:\n    pass\n"
+        )
+
+        evidences = RepoInvestigator()._analyze_code_structure(repo_path)
+        found_locations = {e.location for e in evidences if e.found}
+
+        assert "src/agents/justice/chief_justice.py" in found_locations
+        assert "src/tools/git_tools.py" in found_locations
+        assert "src/core/graph.py" in found_locations
+        assert "src/core/state.py" in found_locations
+
 
 class TestDocAnalyst:
     """Tests for DocAnalyst agent."""

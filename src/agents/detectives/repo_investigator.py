@@ -264,6 +264,27 @@ class RepoInvestigator:
             except Exception as e:
                 logger.warning(f"Failed to inspect base_judge.py for schema evidence: {e}")
 
+        # Emit explicit component existence evidence for key architecture files so
+        # downstream PDF claim verification does not rely on temporary clone paths.
+        critical_files = [
+            "src/agents/justice/chief_justice.py",
+            "src/tools/git_tools.py",
+            "src/core/graph.py",
+            "src/core/state.py",
+        ]
+        for rel_path in critical_files:
+            critical_path = repo_path / rel_path
+            if critical_path.exists():
+                evidences.append(
+                    Evidence(
+                        found=True,
+                        content=f"Verified critical component exists: {rel_path}",
+                        location=rel_path,
+                        confidence=0.95,
+                        detective_name="RepoInvestigator",
+                    )
+                )
+
         return evidences
 
 
